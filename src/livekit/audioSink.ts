@@ -1,5 +1,5 @@
 import { AudioByteStream, type TimedString, type tts } from '@livekit/agents';
-import type { AudioFrame } from '@livekit/rtc-node';
+import { AudioFrame } from '@livekit/rtc-node';
 
 const NUM_CHANNELS = 1;
 
@@ -16,7 +16,7 @@ export class AudioSink {
   #ended = false;
 
   constructor(
-    sampleRate: number,
+    private readonly sampleRate: number,
     private readonly put: (audio: tts.SynthesizedAudio) => void,
     private readonly requestId: string,
     private readonly segmentId: string,
@@ -77,6 +77,11 @@ export class AudioSink {
       this.#emit(false);
       this.#lastFrame = frame;
     }
+    // Since @livekit/agents 1.6.1, flushing an empty AudioByteStream yields no
+    // frame (it used to yield a zero-sample one), so after a chunk_complete
+    // flush there may be nothing left to carry the flag. The segment still
+    // needs its terminal frame.
+    this.#lastFrame ??= new AudioFrame(new Int16Array(0), this.sampleRate, NUM_CHANNELS, 0);
     this.#emit(true);
   }
 }

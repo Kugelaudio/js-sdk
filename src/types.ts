@@ -478,6 +478,14 @@ export interface StreamConfig {
    * inactive ones — bypassing the language filter.
    */
   dictionaryIds?: number[];
+  /**
+   * Project whose pronunciation dictionaries apply to this session. Required
+   * for any dictionary to apply and for a non-empty {@link dictionaryIds}
+   * (the server rejects a selection without its project). Sent on the first
+   * frame only when set. The caller MUST verify the authenticated user has
+   * access to this project; the server treats the value as trusted.
+   */
+  projectId?: number;
 }
 
 /**
@@ -485,7 +493,7 @@ export interface StreamConfig {
  * {@link StreamingSession.updateSettings} / {@link MultiContextSession.updateSettings}
  * (KUG-1166). Every field is optional; an update changes only the fields it
  * carries. Identity / audio-format fields (`voiceId`, `modelId`, `sampleRate`,
- * `outputFormat`, `dictionaryIds`) are NOT here — they are fixed for the
+ * `outputFormat`, `projectId`, `dictionaryIds`) are NOT here — they are fixed for the
  * connection's lifetime and the server rejects them in an update.
  */
 export interface SettingsUpdate {
@@ -804,6 +812,14 @@ export interface MultiContextConfig {
    * inactive ones — bypassing the language filter.
    */
   dictionaryIds?: number[];
+  /**
+   * Project whose pronunciation dictionaries apply to this session. Required
+   * for any dictionary to apply and for a non-empty {@link dictionaryIds}
+   * (the server rejects a selection without its project). Sent on the first
+   * frame only when set. The caller MUST verify the authenticated user has
+   * access to this project; the server treats the value as trusted.
+   */
+  projectId?: number;
   /** Seconds before context auto-closes (default: 20.0) */
   inactivityTimeout?: number;
 }

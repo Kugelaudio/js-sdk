@@ -1864,6 +1864,8 @@ class MultiContextSession {
       if (this.config.maxNewTokens) msg.max_new_tokens = this.config.maxNewTokens;
       if (this.config.normalize !== undefined) msg.normalize = this.config.normalize;
       if (this.config.language) msg.language = this.config.language;
+      // Dictionaries apply only when the frame names their project.
+      if (this.config.projectId !== undefined) msg.project_id = this.config.projectId;
       // [] is meaningful (explicit opt-out) and must be sent; only
       // undefined (use the project default) is omitted.
       if (this.config.dictionaryIds !== undefined) msg.dictionary_ids = this.config.dictionaryIds;
@@ -2434,6 +2436,8 @@ class StreamingSession {
       if (this.config.autoMode !== undefined) msg.auto_mode = this.config.autoMode;
       if (this.config.chunkLengthSchedule?.length) msg.chunk_length_schedule = this.config.chunkLengthSchedule;
       if (this.config.speed !== undefined) msg.speed = this.config.speed;
+      // Dictionaries apply only when the frame names their project.
+      if (this.config.projectId !== undefined) msg.project_id = this.config.projectId;
       // [] is meaningful (explicit opt-out) and must be sent; only
       // undefined (use the project default) is omitted.
       if (this.config.dictionaryIds !== undefined) msg.dictionary_ids = this.config.dictionaryIds;
@@ -2692,8 +2696,8 @@ class StreamingSession {
    * Sends an `update_settings` message and resolves with the generation
    * parameters now in effect (the server's echo). Only the six fields of
    * {@link SettingsUpdate} are updatable; identity / audio-format fields
-   * (`voiceId`, `modelId`, `sampleRate`, `outputFormat`, `dictionaryIds`) are
-   * fixed for the connection — change those with {@link updateConfig} after
+   * (`voiceId`, `modelId`, `sampleRate`, `outputFormat`, `projectId`,
+   * `dictionaryIds`) are fixed for the connection — change those with {@link updateConfig} after
    * {@link endSession} instead.
    *
    * The change applies to the **next turn**: a turn already streaming keeps the

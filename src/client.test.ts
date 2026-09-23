@@ -752,6 +752,38 @@ describe('StreamingSession', () => {
     expect(sent.dictionary_ids).toEqual([]);
   });
 
+  it('first send carries project_id with dictionary_ids (ENG-572)', async () => {
+    const session = client.tts.streamingSession(
+      { voiceId: 1, projectId: 42, dictionaryIds: [7] },
+      {},
+    );
+
+    session.connect();
+    await new Promise<void>((r) => setTimeout(r, 10));
+
+    session.send('Hello.');
+    session.send(' More.');
+    const frames = mockWs.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    const textFrames = frames.filter((f) => typeof f.text === 'string');
+    expect(textFrames[0].project_id).toBe(42);
+    expect(textFrames[0].dictionary_ids).toEqual([7]);
+    // Session config rides only on the first frame.
+    expect(textFrames[1]).not.toHaveProperty('project_id');
+  });
+
+  it('first send omits project_id when not configured', async () => {
+    const session = client.tts.streamingSession({ voiceId: 1 }, {});
+
+    session.connect();
+    await new Promise<void>((r) => setTimeout(r, 10));
+
+    session.send('Hello.');
+    const sent = JSON.parse(
+      mockWs.send.mock.calls[mockWs.send.mock.calls.length - 1][0] as string
+    );
+    expect(sent).not.toHaveProperty('project_id');
+  });
+
   it('cancelCurrent() resolves on quiet timeout if server never acks', async () => {
     const session = client.tts.streamingSession({ voiceId: 1 }, {});
 
@@ -931,6 +963,41 @@ describe('MultiContextSession createContext wire format (KUG-1233)', () => {
     expect(frames[0].voice_settings.voice_id).toBe(42);
     expect(frames[1].text).toBe('hello there');
     expect(frames[1].flush).toBe(true);
+  });
+
+  it('first context frame carries project_id and dictionary_ids (ENG-572)', async () => {
+    const session = client.tts.createMultiContextSession({
+      defaultVoiceId: 42,
+      projectId: 7,
+      dictionaryIds: [120],
+    });
+    await session.connect({});
+
+    session.createContext('a');
+    mockWs.onmessage?.({
+      data: JSON.stringify({ session_started: true, session_id: 's1' }),
+    });
+    session.createContext('b');
+
+    const frames = mockWs.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    const creates = frames.filter((f) => f.context_id !== undefined);
+    expect(creates[0].context_id).toBe('a');
+    expect(creates[0].project_id).toBe(7);
+    expect(creates[0].dictionary_ids).toEqual([120]);
+    // Session config is sticky server-side; later contexts do not resend it.
+    expect(creates[1]).not.toHaveProperty('project_id');
+  });
+
+  it('omits project_id when not configured', async () => {
+    const session = client.tts.createMultiContextSession({ defaultVoiceId: 42 });
+    await session.connect({});
+
+    session.createContext('a');
+
+    const sent = JSON.parse(
+      mockWs.send.mock.calls[mockWs.send.mock.calls.length - 1][0] as string
+    );
+    expect(sent).not.toHaveProperty('project_id');
   });
 
   it('does not duplicate the create frame across repeated sends', async () => {
