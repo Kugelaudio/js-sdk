@@ -1,0 +1,616 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "kugelaudio-sdk"
+            }
+          },
+          {
+            "key": "service.version",
+            "value": {
+              "stringValue": "1.0.0"
+            }
+          },
+          {
+            "key": "telemetry.sdk.language",
+            "value": {
+              "stringValue": "nodejs"
+            }
+          }
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {
+            "name": "kugelaudio.diagnostics",
+            "version": "1"
+          },
+          "logRecords": [
+            {
+              "timeUnixNano": "1767225601000000000",
+              "severityNumber": 17,
+              "severityText": "ERROR",
+              "body": {
+                "stringValue": "connection_failed"
+              },
+              "attributes": [
+                {
+                  "key": "kugel.operation_id",
+                  "value": {
+                    "stringValue": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c01"
+                  }
+                },
+                {
+                  "key": "kugel.operation",
+                  "value": {
+                    "stringValue": "stream"
+                  }
+                },
+                {
+                  "key": "kugel.transport",
+                  "value": {
+                    "stringValue": "websocket"
+                  }
+                },
+                {
+                  "key": "kugel.failure_stage",
+                  "value": {
+                    "stringValue": "handshake"
+                  }
+                },
+                {
+                  "key": "kugel.error_type",
+                  "value": {
+                    "stringValue": "AuthenticationError"
+                  }
+                },
+                {
+                  "key": "kugel.error_code",
+                  "value": {
+                    "stringValue": "UNAUTHORIZED"
+                  }
+                },
+                {
+                  "key": "kugel.http_status",
+                  "value": {
+                    "intValue": "401"
+                  }
+                },
+                {
+                  "key": "kugel.server_request_id",
+                  "value": {
+                    "stringValue": "8f14e45fceea167a5a36dedd4bea2543"
+                  }
+                },
+                {
+                  "key": "kugel.elapsed_ms",
+                  "value": {
+                    "intValue": "212"
+                  }
+                },
+                {
+                  "key": "kugel.audio_chunks",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "kugel.audio_bytes",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "kugel.retry_count",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "kugel.outcome",
+                  "value": {
+                    "stringValue": "failed"
+                  }
+                },
+                {
+                  "key": "kugel.event",
+                  "value": {
+                    "stringValue": "connection_failed"
+                  }
+                },
+                {
+                  "key": "kugel.event_id",
+                  "value": {
+                    "stringValue": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee1"
+                  }
+                },
+                {
+                  "key": "kugel.sdk.name",
+                  "value": {
+                    "stringValue": "js"
+                  }
+                },
+                {
+                  "key": "kugel.sdk.version",
+                  "value": {
+                    "stringValue": "1.0.0"
+                  }
+                },
+                {
+                  "key": "kugel.runtime",
+                  "value": {
+                    "stringValue": "node/20.1.0"
+                  }
+                },
+                {
+                  "key": "kugel.integration",
+                  "value": {
+                    "stringValue": "livekit"
+                  }
+                },
+                {
+                  "key": "kugel.endpoint_kind",
+                  "value": {
+                    "stringValue": "hosted"
+                  }
+                }
+              ]
+            },
+            {
+              "timeUnixNano": "1767225602000000000",
+              "severityNumber": 17,
+              "severityText": "ERROR",
+              "body": {
+                "stringValue": "request_failed"
+              },
+              "attributes": [
+                {
+                  "key": "kugel.operation_id",
+                  "value": {
+                    "stringValue": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c02"
+                  }
+                },
+                {
+                  "key": "kugel.operation",
+                  "value": {
+                    "stringValue": "voices"
+                  }
+                },
+                {
+                  "key": "kugel.transport",
+                  "value": {
+                    "stringValue": "http"
+                  }
+                },
+                {
+                  "key": "kugel.failure_stage",
+                  "value": {
+                    "stringValue": "sending_request"
+                  }
+                },
+                {
+                  "key": "kugel.error_type",
+                  "value": {
+                    "stringValue": "RateLimitError"
+                  }
+                },
+                {
+                  "key": "kugel.error_code",
+                  "value": {
+                    "stringValue": "RATE_LIMITED"
+                  }
+                },
+                {
+                  "key": "kugel.http_status",
+                  "value": {
+                    "intValue": "429"
+                  }
+                },
+                {
+                  "key": "kugel.server_request_id",
+                  "value": {
+                    "stringValue": "c9f0f895fb98ab9159f51fd0297e236d"
+                  }
+                },
+                {
+                  "key": "kugel.elapsed_ms",
+                  "value": {
+                    "intValue": "87"
+                  }
+                },
+                {
+                  "key": "kugel.audio_chunks",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "kugel.audio_bytes",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "kugel.retry_count",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "kugel.outcome",
+                  "value": {
+                    "stringValue": "failed"
+                  }
+                },
+                {
+                  "key": "kugel.event",
+                  "value": {
+                    "stringValue": "request_failed"
+                  }
+                },
+                {
+                  "key": "kugel.event_id",
+                  "value": {
+                    "stringValue": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee2"
+                  }
+                },
+                {
+                  "key": "kugel.sdk.name",
+                  "value": {
+                    "stringValue": "js"
+                  }
+                },
+                {
+                  "key": "kugel.sdk.version",
+                  "value": {
+                    "stringValue": "1.0.0"
+                  }
+                },
+                {
+                  "key": "kugel.runtime",
+                  "value": {
+                    "stringValue": "node/20.1.0"
+                  }
+                },
+                {
+                  "key": "kugel.integration",
+                  "value": {
+                    "stringValue": "livekit"
+                  }
+                },
+                {
+                  "key": "kugel.endpoint_kind",
+                  "value": {
+                    "stringValue": "hosted"
+                  }
+                }
+              ]
+            },
+            {
+              "timeUnixNano": "1767225603000000000",
+              "severityNumber": 17,
+              "severityText": "ERROR",
+              "body": {
+                "stringValue": "stream_interrupted"
+              },
+              "attributes": [
+                {
+                  "key": "kugel.operation_id",
+                  "value": {
+                    "stringValue": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c03"
+                  }
+                },
+                {
+                  "key": "kugel.operation",
+                  "value": {
+                    "stringValue": "multi_context"
+                  }
+                },
+                {
+                  "key": "kugel.transport",
+                  "value": {
+                    "stringValue": "websocket"
+                  }
+                },
+                {
+                  "key": "kugel.failure_stage",
+                  "value": {
+                    "stringValue": "receiving_audio"
+                  }
+                },
+                {
+                  "key": "kugel.error_type",
+                  "value": {
+                    "stringValue": "ConnectionError"
+                  }
+                },
+                {
+                  "key": "kugel.ws_close_code",
+                  "value": {
+                    "intValue": "1006"
+                  }
+                },
+                {
+                  "key": "kugel.server_request_id",
+                  "value": {
+                    "stringValue": "45c48cce2e2d7fbdea1afc51c7c6ad26"
+                  }
+                },
+                {
+                  "key": "kugel.elapsed_ms",
+                  "value": {
+                    "intValue": "1834"
+                  }
+                },
+                {
+                  "key": "kugel.audio_chunks",
+                  "value": {
+                    "intValue": "12"
+                  }
+                },
+                {
+                  "key": "kugel.audio_bytes",
+                  "value": {
+                    "intValue": "115200"
+                  }
+                },
+                {
+                  "key": "kugel.retry_count",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "kugel.outcome",
+                  "value": {
+                    "stringValue": "failed"
+                  }
+                },
+                {
+                  "key": "kugel.event",
+                  "value": {
+                    "stringValue": "stream_interrupted"
+                  }
+                },
+                {
+                  "key": "kugel.event_id",
+                  "value": {
+                    "stringValue": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee3"
+                  }
+                },
+                {
+                  "key": "kugel.sdk.name",
+                  "value": {
+                    "stringValue": "js"
+                  }
+                },
+                {
+                  "key": "kugel.sdk.version",
+                  "value": {
+                    "stringValue": "1.0.0"
+                  }
+                },
+                {
+                  "key": "kugel.runtime",
+                  "value": {
+                    "stringValue": "node/20.1.0"
+                  }
+                },
+                {
+                  "key": "kugel.integration",
+                  "value": {
+                    "stringValue": "livekit"
+                  }
+                },
+                {
+                  "key": "kugel.endpoint_kind",
+                  "value": {
+                    "stringValue": "hosted"
+                  }
+                }
+              ]
+            },
+            {
+              "timeUnixNano": "1767225604000000000",
+              "severityNumber": 17,
+              "severityText": "ERROR",
+              "body": {
+                "stringValue": "retry_exhausted"
+              },
+              "attributes": [
+                {
+                  "key": "kugel.operation_id",
+                  "value": {
+                    "stringValue": "0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c04"
+                  }
+                },
+                {
+                  "key": "kugel.operation",
+                  "value": {
+                    "stringValue": "stream_session"
+                  }
+                },
+                {
+                  "key": "kugel.transport",
+                  "value": {
+                    "stringValue": "websocket"
+                  }
+                },
+                {
+                  "key": "kugel.failure_stage",
+                  "value": {
+                    "stringValue": "connecting"
+                  }
+                },
+                {
+                  "key": "kugel.error_type",
+                  "value": {
+                    "stringValue": "ServerRestartingError"
+                  }
+                },
+                {
+                  "key": "kugel.ws_close_code",
+                  "value": {
+                    "intValue": "1012"
+                  }
+                },
+                {
+                  "key": "kugel.elapsed_ms",
+                  "value": {
+                    "intValue": "2410"
+                  }
+                },
+                {
+                  "key": "kugel.audio_chunks",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "kugel.audio_bytes",
+                  "value": {
+                    "intValue": "0"
+                  }
+                },
+                {
+                  "key": "kugel.retry_count",
+                  "value": {
+                    "intValue": "1"
+                  }
+                },
+                {
+                  "key": "kugel.outcome",
+                  "value": {
+                    "stringValue": "failed"
+                  }
+                },
+                {
+                  "key": "kugel.event",
+                  "value": {
+                    "stringValue": "retry_exhausted"
+                  }
+                },
+                {
+                  "key": "kugel.event_id",
+                  "value": {
+                    "stringValue": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee4"
+                  }
+                },
+                {
+                  "key": "kugel.sdk.name",
+                  "value": {
+                    "stringValue": "js"
+                  }
+                },
+                {
+                  "key": "kugel.sdk.version",
+                  "value": {
+                    "stringValue": "1.0.0"
+                  }
+                },
+                {
+                  "key": "kugel.runtime",
+                  "value": {
+                    "stringValue": "node/20.1.0"
+                  }
+                },
+                {
+                  "key": "kugel.integration",
+                  "value": {
+                    "stringValue": "livekit"
+                  }
+                },
+                {
+                  "key": "kugel.endpoint_kind",
+                  "value": {
+                    "stringValue": "hosted"
+                  }
+                }
+              ]
+            },
+            {
+              "timeUnixNano": "1767225605000000000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {
+                "stringValue": "sdk_stats"
+              },
+              "attributes": [
+                {
+                  "key": "kugel.success_count",
+                  "value": {
+                    "intValue": "41"
+                  }
+                },
+                {
+                  "key": "kugel.failure_count",
+                  "value": {
+                    "intValue": "4"
+                  }
+                },
+                {
+                  "key": "kugel.cancelled_count",
+                  "value": {
+                    "intValue": "3"
+                  }
+                },
+                {
+                  "key": "kugel.event",
+                  "value": {
+                    "stringValue": "sdk_stats"
+                  }
+                },
+                {
+                  "key": "kugel.event_id",
+                  "value": {
+                    "stringValue": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee5"
+                  }
+                },
+                {
+                  "key": "kugel.operation_id",
+                  "value": {
+                    "stringValue": "5e55105e55105e55105e55105e55105e"
+                  }
+                },
+                {
+                  "key": "kugel.sdk.name",
+                  "value": {
+                    "stringValue": "js"
+                  }
+                },
+                {
+                  "key": "kugel.sdk.version",
+                  "value": {
+                    "stringValue": "1.0.0"
+                  }
+                },
+                {
+                  "key": "kugel.runtime",
+                  "value": {
+                    "stringValue": "node/20.1.0"
+                  }
+                },
+                {
+                  "key": "kugel.integration",
+                  "value": {
+                    "stringValue": "livekit"
+                  }
+                },
+                {
+                  "key": "kugel.endpoint_kind",
+                  "value": {
+                    "stringValue": "hosted"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "name": "kugelaudio",
+  "version": "1.0.1",
+  "description": "Official TypeScript/JavaScript SDK for KugelAudio TTS API",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./livekit": {
+      "import": {
+        "types": "./dist/livekit/index.d.mts",
+        "default": "./dist/livekit/index.mjs"
+      },
+      "require": {
+        "types": "./dist/livekit/index.d.ts",
+        "default": "./dist/livekit/index.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "typesVersions": {
+    "*": {
+      "livekit": [
+        "dist/livekit/index.d.ts"
+      ]
+    }
+  },
+  "bin": {
+    "kugelaudio-skills": "./scripts/install-skills.mjs"
+  },
+  "files": [
+    "dist",
+    "src",
+    "skills",
+    "scripts/install-skills.mjs",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "postinstall": "node -e \"console.log('kugelaudio: agent skill available — run npx kugelaudio-skills install to add it to .claude/skills/')\"",
+    "build": "tsup src/index.ts src/livekit/index.ts --format cjs,esm --dts --clean",
+    "dev": "tsup src/index.ts src/livekit/index.ts --format cjs,esm --dts --watch",
+    "lint": "eslint src/",
+    "check:exports": "attw --pack .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "tts",
+    "text-to-speech",
+    "audio",
+    "streaming",
+    "websocket",
+    "kugelaudio"
+  ],
+  "author": "KugelAudio <hello@kugelaudio.com>",
+  "license": "MIT",
+  "homepage": "https://docs.kugelaudio.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kugelaudio/js-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Kugelaudio/js-sdk/issues",
+    "email": "hello@kugelaudio.com"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "0.18.5",
+    "@livekit/agents": "^1.4.11",
+    "@livekit/rtc-node": "^0.13.30",
+    "@types/node": "^25.3.2",
+    "@types/ws": "^8.18.1",
+    "tsup": "^8.0.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.0.18"
+  },
+  "peerDependencies": {
+    "@livekit/agents": ">=1.0.0",
+    "@livekit/rtc-node": ">=0.13.0"
+  },
+  "peerDependenciesMeta": {
+    "@livekit/agents": {
+      "optional": true
+    },
+    "@livekit/rtc-node": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "tsx": "^4.21.0",
+    "ws": "^8.21.0"
+  }
+}

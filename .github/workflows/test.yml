@@ -1,0 +1,27 @@
+name: test
+
+# Runs on the public mirror github.com/Kugelaudio/js-sdk, not in the monorepo
+# (CONTRIBUTING.md). Same steps as the monorepo's js-sdk check.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - run: npm run check:exports
+      - run: npm test
