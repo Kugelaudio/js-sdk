@@ -392,7 +392,8 @@ export function classifyWsClose(
  *  - an Error whose `.message` is `"Unexpected server response: <status>"`
  *  - `error.code === 'EUNEXPECTEDRESPONSE'`, with `error.statusCode` on some versions
  *  - a kept rejection response `{statusCode, message, headers}`, whose
- *    `x-request-id` header becomes the error's `requestId`
+ *    `x-request-id` header becomes the error's `requestId` and whose
+ *    `retry-after` header becomes its `retryAfter`
  *
  * The TTS server rejects WS upgrades with a bare API key using HTTP 403
  * (not 401), so we treat 403 here as an auth failure — HTTP API callers
@@ -417,11 +418,18 @@ export function classifyWsHandshakeError(err: unknown): KugelAudioError | null {
   }
   if (status === undefined) return null;
 
-  // Ingress puts `x-request-id` on the rejection response itself; it is
-  // present only when the caller kept the response (see handshake.ts).
-  const rawId = e.headers?.['x-request-id'];
-  const requestId = Array.isArray(rawId) ? rawId[0] : rawId;
-  const opts = requestId ? { requestId } : {};
+  // Ingress puts `x-request-id` and `retry-after` on the rejection response
+  // itself; they are present only when the caller kept the response (see
+  // handshake.ts).
+  const header = (name: string): string | undefined => {
+    const raw = e.headers?.[name];
+    return Array.isArray(raw) ? raw[0] : raw;
+  };
+  const requestId = header('x-request-id');
+  const rawRetry = header('retry-after');
+  const opts: { requestId?: string; retryAfter?: number } = {};
+  if (requestId) opts.requestId = requestId;
+  if (rawRetry && Number.isFinite(Number(rawRetry))) opts.retryAfter = Number(rawRetry);
 
   if (status === 403) {
     return new AuthenticationError(undefined, opts);

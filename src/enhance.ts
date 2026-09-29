@@ -16,16 +16,14 @@
 import { AudioStream, LoadedAudio, isBinary, nodeFs, parseWav, toBytes } from './audio';
 import type { KugelAudio } from './client';
 import {
-  AuthenticationError,
   ConnectionError,
-  InsufficientCreditsError,
   KugelAudioError,
   ValidationError,
   classifyWsClose,
   classifyWsFrame,
   classifyWsHandshakeError,
 } from './errors';
-import { captureHandshakeRejection, handshakeDeadline } from './handshake';
+import { captureHandshakeRejection, handshakeDeadline, handshakeRejectionOf } from './handshake';
 import { arrayBufferToBase64, createWavFile } from './utils';
 import { getWebSocket, loadWebSocket } from './websocket';
 
@@ -40,14 +38,6 @@ const END_MESSAGE = JSON.stringify({ type: 'end' });
 const NOT_READY = 'The enhancement stream did not become ready in time.';
 const WS_OPEN = 1;
 const SEND_HIGH_WATER_BYTES = 1 << 20;
-
-// Close codes the enhancement stream uses (see the public API docs).
-const WS_CLOSE_INVALID = 4400;
-const WS_CLOSE_UNAUTHORIZED = 4401;
-const WS_CLOSE_INSUFFICIENT_CREDITS = 4402;
-const WS_CLOSE_IDLE = 4408;
-const WS_CLOSE_BUSY = 4429;
-const WS_CLOSE_UNAVAILABLE = 4503;
 
 /**
  * Audio accepted by `client.enhance`: the result of {@link loadAudio}, or the
@@ -217,30 +207,9 @@ function* split(chunk: unknown, maxBytes: number): Generator<Uint8Array> {
 
 // ----------------------------------------------------------- WebSocket
 
-function classifyErrorFrame(data: { code?: unknown; message?: unknown }): KugelAudioError {
-  return classifyWsFrame({
-    error_code: typeof data.code === 'string' ? data.code : undefined,
-    error: typeof data.message === 'string' ? data.message : undefined,
-  });
-}
-
-function classifyClose(code: number | undefined, reason: string | undefined): KugelAudioError {
-  const detail = reason ? ` (${reason})` : '';
-  if (code === WS_CLOSE_UNAUTHORIZED) return new AuthenticationError();
-  if (code === WS_CLOSE_INSUFFICIENT_CREDITS) return new InsufficientCreditsError();
-  if (code === WS_CLOSE_INVALID) {
-    return new ValidationError(`The enhancement stream rejected the request${detail}.`);
-  }
-  if (code === WS_CLOSE_BUSY) {
-    return new ConnectionError(`Speech enhancement is busy${detail}. Retry shortly.`);
-  }
-  if (code === WS_CLOSE_IDLE) {
-    return new ConnectionError(`The enhancement stream closed after 30 s without audio${detail}.`);
-  }
-  if (code === WS_CLOSE_UNAVAILABLE) {
-    return new ConnectionError(`Speech enhancement is temporarily unavailable${detail}. Retry shortly.`);
-  }
-  return classifyWsClose(code, reason);
+/** A server error frame (`{type: 'error', error, error_code, code, ...}`), typed like TTS. */
+function frameError(data: Record<string, unknown>): KugelAudioError {
+  return classifyWsFrame(data as Parameters<typeof classifyWsFrame>[0]);
 }
 
 type StreamEvent =
@@ -290,15 +259,17 @@ function openSocket(ws: WebSocket, timeoutMs: number): Promise<void> {
     };
     ws.onerror = (event: unknown) => {
       deadline.failed();
-      const underlying = (event as { error?: unknown } | null)?.error ?? event;
+      // A refused upgrade: the kept rejection response, else the transport error.
+      const failure =
+        handshakeRejectionOf(ws) ?? (event as { error?: unknown } | null)?.error ?? event;
       reject(
-        classifyWsHandshakeError(underlying) ??
+        classifyWsHandshakeError(failure) ??
           new ConnectionError('KugelAudio WebSocket handshake failed.'),
       );
     };
     ws.onclose = (event: { code?: number; reason?: string }) => {
       deadline.failed();
-      reject(classifyClose(event.code, event.reason));
+      reject(classifyWsClose(event.code, event.reason));
     };
   });
 }
@@ -368,9 +339,9 @@ async function* runStream(
     ws.send(JSON.stringify(config));
 
     const first = await events.next(timeoutMs);
-    if (first.kind === 'close') throw classifyClose(first.code, first.reason);
+    if (first.kind === 'close') throw classifyWsClose(first.code, first.reason);
     const ready = first.kind === 'message' ? parseText(first.data) : {};
-    if (ready.type === 'error') throw classifyErrorFrame(ready);
+    if (ready.type === 'error') throw frameError(ready);
     if (ready.type !== 'ready') {
       throw new ConnectionError('Unexpected first message from the enhancement stream.');
     }
@@ -383,14 +354,14 @@ async function* runStream(
     for (;;) {
       const event = await events.next();
       if (event.kind === 'failure') throw event.error;
-      if (event.kind === 'close') throw classifyClose(event.code, event.reason);
+      if (event.kind === 'close') throw classifyWsClose(event.code, event.reason);
       const bytes = await binaryPayload(event.data);
       if (bytes) {
         yield bytes;
         continue;
       }
       const message = parseText(event.data);
-      if (message.type === 'error') throw classifyErrorFrame(message);
+      if (message.type === 'error') throw frameError(message);
       if (message.type === 'done') return;
     }
   } finally {

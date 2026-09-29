@@ -29,8 +29,12 @@ import {
 
 type Server = (ws: FakeWs, data: unknown) => void;
 
+/** A refused upgrade: HTTP status and response headers. */
+type Refusal = { statusCode: number; headers: Record<string, string> };
+
 class FakeWs {
   static last: FakeWs | null = null;
+  static refusal: Refusal | null = null;
   url: string;
   readyState = 0;
   binaryType = 'blob';
@@ -41,14 +45,32 @@ class FakeWs {
   onclose: ((event: { code: number; reason: string }) => void) | null = null;
   sent: unknown[] = [];
   close = vi.fn(() => this.serverClose(1000, ''));
+  listeners = new Map<string, (...args: unknown[]) => void>();
 
   constructor(url: string) {
     this.url = url;
     FakeWs.last = this;
+    const refusal = FakeWs.refusal;
     setTimeout(() => {
+      if (refusal) {
+        this.listeners.get('unexpected-response')?.({}, refusal);
+        return;
+      }
       this.readyState = 1;
       this.onopen?.();
     }, 0);
+  }
+
+  /** The `ws` package's EventEmitter surface, as far as the SDK uses it. */
+  on(event: string, listener: (...args: unknown[]) => void): void {
+    this.listeners.set(event, listener);
+  }
+
+  /** Mirrors `ws`: a CONNECTING socket aborts with one error and one close. */
+  terminate(): void {
+    this.readyState = 3;
+    this.onerror?.({ error: new Error('WebSocket was closed before the connection was established') });
+    this.onclose?.({ code: 1006, reason: '' });
   }
 
   send(data: unknown): void {
@@ -145,6 +167,7 @@ const client = () => new KugelAudio({ apiKey: 'test-key' });
 beforeEach(() => {
   server = echoServer;
   FakeWs.last = null;
+  FakeWs.refusal = null;
 });
 
 afterEach(() => {
@@ -234,6 +257,17 @@ describe('EnhancedAudio', () => {
   });
 });
 
+const RPM = 'Rate limit exceeded (10 requests per minute)';
+const CONCURRENCY = 'Concurrent generation limit reached (2)';
+const NOT_ENABLED = 'Speech enhancement is not enabled for this organization.';
+const AT_CAPACITY = 'Speech enhancement is at capacity. Please try again shortly.';
+
+/** A server error frame in the shared `{type, error, error_code, code}` shape. */
+function frame(code: number, errorCode: string, error: string, extra: object = {}): object {
+  return { type: 'error', error, error_code: errorCode, code, request_id: 'req-ws', ...extra };
+}
+const RATE_LIMITED_FRAME = frame(429, 'RATE_LIMITED', RPM, { retry_after: 7 });
+
 // ---------------------------------------------------------------------------
 // client.enhance.generate
 // ---------------------------------------------------------------------------
@@ -290,16 +324,37 @@ describe('client.enhance.generate', () => {
   });
 
   it.each([
-    [401, AuthenticationError],
-    [402, InsufficientCreditsError],
-    [429, RateLimitError],
-    [400, ValidationError],
-  ])('maps HTTP %i to the SDK error class', async (status, errorClass) => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ detail: 'nope' }, status)));
-    await expect(
-      client().enhance.generate(await loadAudio(wav()), { model: 'clarity-1' }),
-    ).rejects.toBeInstanceOf(errorClass);
-  });
+    ['400', 400, 'VALIDATION_ERROR', 'bad wav', {}, ValidationError, undefined],
+    ['401', 401, 'UNAUTHORIZED', 'bad key', {}, AuthenticationError, undefined],
+    ['402', 402, 'INSUFFICIENT_CREDITS', 'Insufficient credits', {}, InsufficientCreditsError, undefined],
+    ['403 not enabled', 403, 'UNAUTHORIZED', NOT_ENABLED, {}, AuthenticationError, undefined],
+    ['429 rpm', 429, 'RATE_LIMITED', RPM, { 'Retry-After': '42' }, RateLimitError, 42],
+    ['429 concurrency', 429, 'RATE_LIMITED', CONCURRENCY, {}, RateLimitError, undefined],
+    ['503 capacity', 503, 'MODEL_UNAVAILABLE', AT_CAPACITY, { 'Retry-After': '5' }, ConnectionError, 5],
+  ] as const)(
+    'maps HTTP %s to the same error class as TTS',
+    async (_name, status, errorCode, message, headers, errorClass, retryAfter) => {
+      const body = { error: message, error_code: errorCode, code: status };
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(
+          new Response(JSON.stringify(body), {
+            status,
+            headers: { 'content-type': 'application/json', 'x-request-id': 'req-http', ...headers },
+          }),
+        ),
+      );
+      const err = (await client()
+        .enhance.generate(await loadAudio(wav()), { model: 'clarity-1' })
+        .then(() => null, (e: unknown) => e)) as KugelAudioError;
+      expect(err).toBeInstanceOf(errorClass);
+      expect(err.statusCode).toBe(status);
+      expect(err.errorCode).toBe(errorCode);
+      expect(err.retryAfter).toBe(retryAfter);
+      expect(err.requestId).toBe('req-http');
+      expect(err.message).toContain(message);
+    },
+  );
 
   it('reports an unexpected success body as a KugelAudioError', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ ok: true }, 200)));
@@ -374,39 +429,74 @@ describe('client.enhance.stream', () => {
     await expect(collect(stream)).rejects.toThrow(/must be mono PCM16 bytes/);
   });
 
-  it('maps a server error frame to the SDK error class', async () => {
+  type Case = [
+    name: string,
+    setup: () => void,
+    errorClass: typeof KugelAudioError,
+    statusCode: number,
+    retryAfter: number | undefined,
+    requestId: string | undefined,
+  ];
+  const refuseUpgrade = (statusCode: number, headers: Record<string, string> = {}) => () => {
+    FakeWs.refusal = { statusCode, headers };
+  };
+  const refuseConfig = (frame: object | null, code: number) => () => {
     server = (ws, data) => {
-      if (typeof data === 'string' && JSON.parse(data).type === 'config') {
-        ws.emit(JSON.stringify({ type: 'ready' }));
-        ws.emit(JSON.stringify({ type: 'error', code: 'INSUFFICIENT_CREDITS', message: 'Out of credits.' }));
+      if (typeof data !== 'string' || JSON.parse(data).type !== 'config') return;
+      if (frame) ws.emit(JSON.stringify(frame));
+      ws.serverClose(code, '');
+    };
+  };
+  it.each<Case>([
+    ['handshake 429', refuseUpgrade(429, { 'retry-after': '7', 'x-request-id': 'req-hs' }), RateLimitError, 429, 7, 'req-hs'],
+    ['handshake 429 concurrency', refuseUpgrade(429, { 'x-request-id': 'req-hs' }), RateLimitError, 429, undefined, 'req-hs'],
+    ['handshake 402', refuseUpgrade(402), InsufficientCreditsError, 402, undefined, undefined],
+    ['handshake 403', refuseUpgrade(403), AuthenticationError, 401, undefined, undefined],
+    ['handshake 503', refuseUpgrade(503, { 'retry-after': '5' }), ConnectionError, 503, 5, undefined],
+    ['frame then 4029', refuseConfig(RATE_LIMITED_FRAME, 4029), RateLimitError, 429, 7, 'req-ws'],
+    ['close 4029 only', refuseConfig(null, 4029), RateLimitError, 429, undefined, undefined],
+    ['frame then 4000', refuseConfig(frame(400, 'VALIDATION_ERROR', 'bad rate'), 4000), ValidationError, 400, undefined, 'req-ws'],
+    ['close 4001', refuseConfig(null, 4001), AuthenticationError, 401, undefined, undefined],
+    ['close 4003', refuseConfig(null, 4003), InsufficientCreditsError, 402, undefined, undefined],
+    ['close 4500', refuseConfig(null, 4500), ConnectionError, 503, undefined, undefined],
+    ['close 4000', refuseConfig(null, 4000), ConnectionError, 503, undefined, undefined],
+    ['close 1011', refuseConfig(null, 1011), ConnectionError, 503, undefined, undefined],
+  ])('maps a %s refusal to the same error class as TTS', async (_name, setup, errorClass, statusCode, retryAfter, requestId) => {
+    setup();
+    const input = await loadAudioStream(wav());
+    const err = await collect(client().enhance.stream(input, { model: 'clarity-1' })).catch(
+      (e: unknown) => e as KugelAudioError,
+    );
+    expect(err).toBeInstanceOf(KugelAudioError);
+    expect((err as KugelAudioError).constructor).toBe(errorClass);
+    expect((err as KugelAudioError).statusCode).toBe(statusCode);
+    expect((err as KugelAudioError).retryAfter).toBe(retryAfter);
+    expect((err as KugelAudioError).requestId).toBe(requestId);
+  });
+
+  it.each<[string, object | null, number, typeof KugelAudioError, number | undefined]>([
+    ['frame then 4029', RATE_LIMITED_FRAME, 4029, RateLimitError, 7],
+    ['close 4029 only', null, 4029, RateLimitError, undefined],
+    ['frame then 4500', frame(503, 'MODEL_UNAVAILABLE', 'backend failed'), 4500, ConnectionError, undefined],
+    ['close 4003', null, 4003, InsufficientCreditsError, undefined],
+  ])('maps a %s mid-session', async (_name, errorFrame, code, errorClass, retryAfter) => {
+    server = (ws, data) => {
+      echoServer(ws, data);
+      if (data instanceof Uint8Array) {
+        if (errorFrame) ws.emit(JSON.stringify(errorFrame));
+        ws.serverClose(code, '');
       }
     };
-    const input = await loadAudioStream(wav());
-    await expect(collect(client().enhance.stream(input, { model: 'clarity-1' }))).rejects.toBeInstanceOf(
-      InsufficientCreditsError,
-    );
-  });
-
-  it('maps an error frame instead of ready', async () => {
-    server = (ws) => ws.emit(JSON.stringify({ type: 'error', code: 'VALIDATION_ERROR', message: 'bad model' }));
-    const input = await loadAudioStream(wav());
-    await expect(collect(client().enhance.stream(input, { model: 'nope' }))).rejects.toThrow(/bad model/);
-  });
-
-  it.each([
-    [4401, AuthenticationError, /API key/],
-    [4400, ValidationError, /rejected the request/],
-    [4429, ConnectionError, /busy/],
-    [4408, ConnectionError, /30 s without audio/],
-    [4402, InsufficientCreditsError, /out of credits/],
-    [4503, ConnectionError, /temporarily unavailable/],
-    [1011, ConnectionError, /closed by server/],
-  ])('maps close code %i', async (code, errorClass, message) => {
-    server = (ws) => ws.serverClose(code, 'why');
-    const input = await loadAudioStream(wav());
-    const run = collect(client().enhance.stream(input, { model: 'clarity-1' }));
-    await expect(run).rejects.toBeInstanceOf(errorClass);
-    await expect(run).rejects.toThrow(message);
+    const received: Uint8Array[] = [];
+    const run = async () => {
+      for await (const chunk of client().enhance.stream(await loadAudioStream(wav({ frames: 16000 })), { model: 'clarity-1' })) {
+        received.push(chunk);
+      }
+    };
+    const err = await run().catch((e: unknown) => e as KugelAudioError);
+    expect((err as KugelAudioError).constructor).toBe(errorClass);
+    expect((err as KugelAudioError).retryAfter).toBe(retryAfter);
+    expect(received).toHaveLength(1);
   });
 
   it('closes the socket when the caller stops iterating', async () => {
