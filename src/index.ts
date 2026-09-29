@@ -92,6 +92,23 @@ export { parseSessionUsage } from './types';
 
 export { DictionariesResource, DictionaryEntriesResource } from './dictionaries';
 
+// Speech enhancement
+export { AudioStream, LoadedAudio, loadAudio, loadAudioStream } from './audio';
+export type { AudioSource, LoadAudioStreamOptions } from './audio';
+export {
+    ENHANCED_SAMPLE_RATE,
+    EnhanceResource,
+    EnhancedAudio,
+    TASK_NOISE_REMOVAL,
+    TASK_TARGET_SPEAKER_EXTRACTION,
+} from './enhance';
+export type {
+    AudioInput,
+    EnhanceGenerateOptions,
+    EnhanceStreamOptions,
+    PcmChunk,
+} from './enhance';
+
 // Errors
 export {
     AuthenticationError,

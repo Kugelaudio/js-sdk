@@ -5,6 +5,7 @@
 import { Diagnostics, operationForPath } from './diagnostics';
 import type { Operation } from './diagnostics';
 import { DictionariesResource } from './dictionaries';
+import { EnhanceResource } from './enhance';
 import {
     ConnectionError,
     KugelAudioError,
@@ -2796,6 +2797,8 @@ export class KugelAudio {
   public readonly tts: TTSResource;
   /** Speech-to-text resource */
   public readonly asr: ASRResource;
+  /** Speech enhancement resource */
+  public readonly enhance: EnhanceResource;
 
   constructor(options: KugelAudioOptions) {
     if (!options.apiKey) {
@@ -2847,6 +2850,7 @@ export class KugelAudio {
     this.dictionaries = new DictionariesResource(this);
     this.asr = new ASRResource(this);
     this.tts = new TTSResource(this);
+    this.enhance = new EnhanceResource(this);
   }
 
   /**
@@ -2897,6 +2901,15 @@ export class KugelAudio {
   /** Get TTS URL */
   get ttsUrl(): string {
     return this._ttsUrl;
+  }
+
+  /**
+   * WebSocket URL for `path` on the API host, with `query` and the SDK query.
+   * @internal
+   */
+  apiWsUrl(path: string, query: Record<string, string>): string {
+    const base = this._apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+    return appendSdkQuery(`${base}${path}?${new URLSearchParams(query)}`);
   }
 
   /** Get keepalive ping interval in milliseconds, or null if disabled. */
@@ -3019,11 +3032,16 @@ export class KugelAudio {
 
   /**
    * Make a multipart/form-data request (for file uploads).
-   * @internal Used by VoicesResource for reference file uploads.
+   * @internal Used for file uploads; `parse` reads a non-JSON success body.
    */
-  async requestMultipart<T>(method: string, path: string, formData: FormData): Promise<T> {
+  async requestMultipart<T>(
+    method: string,
+    path: string,
+    formData: FormData,
+    parse: (response: Response) => Promise<T> = parseJsonBody,
+  ): Promise<T> {
     return this._diagnostics.run(operationForPath(path), 'http', (op) =>
-      this.sendMultipart<T>(method, path, formData, op),
+      this.sendMultipart<T>(method, path, formData, op, parse),
     );
   }
 
@@ -3032,6 +3050,7 @@ export class KugelAudio {
     path: string,
     formData: FormData,
     op: Operation,
+    parse: (response: Response) => Promise<T>,
   ): Promise<T> {
     const url = `${this._apiUrl}${path}`;
 
@@ -3060,7 +3079,7 @@ export class KugelAudio {
       }
 
       op.markStage('finalizing');
-      return await parseJsonBody<T>(response);
+      return await parse(response);
     } catch (error) {
       clearTimeout(timeoutId);
       if (error instanceof KugelAudioError) {

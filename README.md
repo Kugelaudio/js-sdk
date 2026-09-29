@@ -72,6 +72,56 @@ More: [barge-in](https://docs.kugelaudio.com/streaming/barge-in) ·
 [multi-context](https://docs.kugelaudio.com/streaming/multi-context) ·
 [word timestamps](https://docs.kugelaudio.com/streaming/word-timestamps)
 
+## Speech Enhancement
+
+Enhancement removes background noise. Pass `speaker` (a clean 2–8 s sample of
+one voice) to keep only that voice and remove every other voice and sound.
+`model` is required on every call. Audio is loaded explicitly: `loadAudio` for
+a whole recording, `loadAudioStream` for real-time streaming.
+
+```typescript
+import { KugelAudio, loadAudio, loadAudioStream } from 'kugelaudio';
+
+const client = new KugelAudio({ apiKey: 'YOUR_API_KEY' });
+
+const audio = await loadAudio('meeting.wav');
+const speaker = await loadAudio('speaker.wav');
+const result = await client.enhance.generate(audio, { model: 'clarity-1', speaker });
+await result.save('clean.wav');
+
+const input = await loadAudioStream('meeting.wav');
+for await (const chunk of client.enhance.stream(input, { model: 'clarity-1', speaker })) {
+  console.log(chunk.length, 'bytes'); // enhanced 16-bit mono PCM, 24 kHz, as it arrives
+}
+```
+
+Leave out `speaker` to only remove noise:
+`await client.enhance.generate(audio, { model: 'clarity-1' })`.
+
+`loadAudio` accepts any supported WAV (16/24/32-bit PCM or float, mono or
+stereo, 8–48 kHz, up to 300 s) as a path (Node.js) or as a `Blob`, `File`,
+`ArrayBuffer` or `Uint8Array` (browser and Node.js); `generate` also takes those
+directly. The result is mono 16-bit PCM at 24 kHz with the same duration:
+`result.audio` (raw PCM `Uint8Array`), `result.wav` (WAV bytes),
+`result.toBlob()`, `result.duration` (seconds), `result.sampleRate` (24000).
+`result.save(path)` is Node.js only.
+
+`loadAudioStream` reads a 16-bit PCM WAV (stereo is mixed down to mono) into
+100 ms chunks and exposes `.sampleRate` and `.duration`. For live audio, pass
+any iterable or async iterable of raw 16-bit mono PCM chunks (up to 1 s each)
+with its `sampleRate`:
+
+```typescript
+for await (const chunk of client.enhance.stream(microphone(), { model: 'clarity-1', sampleRate: 16000 })) {
+  play(chunk);
+}
+```
+
+Input is sent in the background while you iterate, and iteration ends once the
+last input has been enhanced. Breaking out of the loop closes the connection.
+Errors reject with the usual SDK errors (`ValidationError`,
+`AuthenticationError`, `ConnectionError`, …).
+
 ## LiveKit Agents
 
 ```bash
