@@ -421,6 +421,27 @@ export class EnhanceResource {
   }
 
   /**
+   * Open the connection `generate` uses, so the first request skips the
+   * connection setup (TCP and TLS).
+   *
+   * Sends one `GET` to the enhancement path, which only accepts `POST`: the
+   * server refuses it before authentication or any processing, so it is not
+   * billed and does not count against rate limits. Safe to call any number of
+   * times; call it shortly before the first request, since idle connections
+   * are closed after a few seconds. Never rejects: a network error is logged
+   * and the first request then connects as usual.
+   *
+   * @example
+   * ```typescript
+   * await client.enhance.prewarm();
+   * const result = await client.enhance.generate(await loadAudio('call.wav'), { model: 'clarity-1' });
+   * ```
+   */
+  async prewarm(): Promise<void> {
+    await this.client.warmConnection(ENHANCE_PATH);
+  }
+
+  /**
    * Enhance audio in real time; iterate the enhanced chunks as they arrive.
    *
    * Input is sent in the background while you iterate, and iteration ends

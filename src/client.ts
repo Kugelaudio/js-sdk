@@ -3031,6 +3031,41 @@ export class KugelAudio {
   }
 
   /**
+   * Open a pooled keep-alive connection to the API host for `path`, a route
+   * that only accepts POST: the `GET` is refused (405) before authentication
+   * or any work, so it is not billed and not rate limited. Never throws; a
+   * network error or timeout is logged and the next request connects itself.
+   * @internal
+   */
+  async warmConnection(path: string): Promise<void> {
+    const url = `${this._apiUrl}${path}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this._timeout);
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { ...authHeaders(this._apiKey), ...sdkHeaders() },
+        signal: controller.signal,
+      });
+      // Read the (tiny) body so the connection goes back to the pool.
+      await response.arrayBuffer();
+    } catch (error) {
+      // KEEP-JUSTIFIED: warming is an optimisation; the first real request
+      // connects on its own and raises its own typed error.
+      console.warn(
+        `[KugelAudio] Could not prewarm the connection to ${url} ` +
+          `(${(error as Error).message}); the first request will connect instead.`,
+      );
+      return;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+    // fetch (undici) returns the socket to its pool one macrotask after the
+    // body is read; wait for it so a request made right after this reuses it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  /**
    * Make a multipart/form-data request (for file uploads).
    * @internal Used for file uploads; `parse` reads a non-JSON success body.
    */
