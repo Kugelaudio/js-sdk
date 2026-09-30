@@ -18,6 +18,7 @@ import type { KugelAudio } from './client';
 import {
   ConnectionError,
   KugelAudioError,
+  RateLimitError,
   ValidationError,
   classifyWsClose,
   classifyWsFrame,
@@ -313,46 +314,110 @@ async function pump(
   if (live()) ws.send(END_MESSAGE);
 }
 
-async function* runStream(
-  url: string,
-  config: Record<string, unknown>,
-  audio: Iterable<unknown> | AsyncIterable<unknown>,
-  speaker: AudioInput | undefined,
-  timeoutMs: number,
-): AsyncGenerator<Uint8Array, void, undefined> {
-  if (speaker !== undefined) {
-    const bytes = await readAudioBytes(speaker);
-    config.speaker_wav_b64 = arrayBufferToBase64(toBytes(bytes).buffer as ArrayBuffer);
-  }
+/** One open enhancement socket and the events it delivered. */
+interface Socket {
+  ws: WebSocket;
+  events: EventQueue;
+  closed: boolean;
+}
+
+/** A reused session socket turned out closed before it took the config. */
+class StaleSocket extends Error {}
+
+// The server closes a session after 60 s without a config and at 1 h; a socket
+// is not reused past these, a little before the server's limits.
+const SESSION_IDLE_MS = 55_000;
+const SESSION_LIFETIME_MS = 3_540_000;
+// What a server without session mode sends on a socket left without a config
+// for 30 s, before it closes it: that socket is stale, not the new config wrong.
+const IDLE_FRAME_CODE = 408;
+
+async function connectSocket(url: string, timeoutMs: number): Promise<Socket> {
   const WS = getWebSocket() ?? (await loadWebSocket());
-  const ws = new WS(url);
+  let ws: WebSocket;
+  try {
+    ws = new WS(url);
+  } catch {
+    // Its message holds the URL, whose query carries the API key.
+    throw new ValidationError('The KugelAudio API URL does not form a valid WebSocket URL.');
+  }
   captureHandshakeRejection(ws);
   ws.binaryType = 'arraybuffer';
-  const events = new EventQueue();
-  ws.onmessage = (event: { data: unknown }) => events.push({ kind: 'message', data: event.data });
-  let stopped = false;
+  const socket: Socket = { ws, events: new EventQueue(), closed: false };
+  ws.onmessage = (event: { data: unknown }) => socket.events.push({ kind: 'message', data: event.data });
   try {
     await openSocket(ws, timeoutMs);
-    ws.onclose = (event: { code?: number; reason?: string }) =>
-      events.push({ kind: 'close', code: event.code, reason: event.reason });
-    ws.onerror = () => {}; // the close event that follows carries the reason
-    ws.send(JSON.stringify(config));
-
-    const first = await events.next(timeoutMs);
-    if (first.kind === 'close') throw classifyWsClose(first.code, first.reason);
-    const ready = first.kind === 'message' ? parseText(first.data) : {};
-    if (ready.type === 'error') throw frameError(ready);
-    if (ready.type !== 'ready') {
-      throw new ConnectionError('Unexpected first message from the enhancement stream.');
-    }
-
-    pump(ws, audio, (config.sample_rate_hz as number) * 2, () => stopped).catch((error) => {
-      events.push({ kind: 'failure', error });
+  } catch (error) {
+    try {
       ws.close();
-    });
+    } catch {
+      // already closed
+    }
+    throw error;
+  }
+  ws.onclose = (event: { code?: number; reason?: string }) => {
+    socket.closed = true;
+    socket.events.push({ kind: 'close', code: event.code, reason: event.reason });
+  };
+  ws.onerror = () => {}; // the close event that follows carries the reason
+  return socket;
+}
 
+function closeSocket(socket: Socket): void {
+  socket.closed = true;
+  try {
+    socket.ws.close();
+  } catch {
+    // already closed
+  }
+}
+
+/**
+ * Send `config` and wait for `ready`; returns it. On a `reused` socket, a
+ * close (the server's idle, lifetime or restart close) or an old server's
+ * idle-timeout frame throws {@link StaleSocket}.
+ */
+async function begin(
+  socket: Socket,
+  config: Record<string, unknown>,
+  timeoutMs: number,
+  reused: boolean,
+): Promise<Record<string, unknown>> {
+  if (socket.closed || socket.ws.readyState !== WS_OPEN) {
+    if (reused) throw new StaleSocket();
+    throw new ConnectionError('The enhancement connection is closed.');
+  }
+  socket.ws.send(JSON.stringify(config));
+  const first = await socket.events.next(timeoutMs);
+  if (first.kind === 'close') {
+    if (reused) throw new StaleSocket();
+    throw classifyWsClose(first.code, first.reason);
+  }
+  const ready = first.kind === 'message' ? parseText(first.data) : {};
+  if (ready.type === 'error') {
+    if (reused && ready.code === IDLE_FRAME_CODE) throw new StaleSocket();
+    throw frameError(ready);
+  }
+  if (ready.type !== 'ready') {
+    throw new ConnectionError('Unexpected first message from the enhancement stream.');
+  }
+  return ready;
+}
+
+/** After `ready`: send the audio and `end`, yield the enhanced chunks until `done`. Leaves the socket open. */
+async function* exchange(
+  socket: Socket,
+  config: Record<string, unknown>,
+  audio: Iterable<unknown> | AsyncIterable<unknown>,
+): AsyncGenerator<Uint8Array, void, undefined> {
+  let stopped = false;
+  try {
+    pump(socket.ws, audio, (config.sample_rate_hz as number) * 2, () => stopped).catch((error) => {
+      socket.events.push({ kind: 'failure', error });
+      closeSocket(socket);
+    });
     for (;;) {
-      const event = await events.next();
+      const event = await socket.events.next();
       if (event.kind === 'failure') throw event.error;
       if (event.kind === 'close') throw classifyWsClose(event.code, event.reason);
       const bytes = await binaryPayload(event.data);
@@ -366,12 +431,248 @@ async function* runStream(
     }
   } finally {
     stopped = true;
+  }
+}
+
+async function withSpeaker(
+  config: Record<string, unknown>,
+  speaker: AudioInput | undefined,
+): Promise<Record<string, unknown>> {
+  if (speaker === undefined) return config;
+  const bytes = await readAudioBytes(speaker);
+  return { ...config, speaker_wav_b64: arrayBufferToBase64(toBytes(bytes).buffer as ArrayBuffer) };
+}
+
+async function* runStream(
+  url: string,
+  config: Record<string, unknown>,
+  audio: Iterable<unknown> | AsyncIterable<unknown>,
+  speaker: AudioInput | undefined,
+  timeoutMs: number,
+): AsyncGenerator<Uint8Array, void, undefined> {
+  const full = await withSpeaker(config, speaker);
+  const socket = await connectSocket(url, timeoutMs);
+  try {
+    await begin(socket, full, timeoutMs, false);
+    yield* exchange(socket, full, audio);
+  } finally {
+    closeSocket(socket);
+  }
+}
+
+/** Serialises the streams of one session: the next waits for the previous. */
+class Lock {
+  private tail: Promise<void> = Promise.resolve();
+
+  async acquire(): Promise<() => void> {
+    let release!: () => void;
+    const next = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const previous = this.tail;
+    this.tail = previous.then(() => next);
+    await previous;
+    return release;
+  }
+}
+
+/**
+ * One warm WebSocket that carries enhancement streams one after another.
+ *
+ * From `client.enhance.session()`. Call {@link EnhanceSession.connect} ahead of
+ * the first audio (e.g. while an agent starts) and {@link EnhanceSession.close}
+ * when done. Each {@link EnhanceSession.stream} sends its own config, so the
+ * task, speaker and sample rate may change between streams; it is admitted and
+ * billed as one request of its own. Streams run one at a time: a second
+ * `stream()` waits until the first has finished.
+ *
+ * The socket is replaced without an error when the server closed it (after
+ * 60 s without a stream, at its one-hour lifetime, or during a restart). A
+ * server without session support gets one connection per stream instead.
+ *
+ * @example
+ * ```typescript
+ * const session = client.enhance.session();
+ * await session.connect();
+ * try {
+ *   for (const input of [first, second]) {
+ *     for await (const chunk of session.stream(input, { model: 'clarity-1' })) play(chunk);
+ *   }
+ * } finally {
+ *   await session.close();
+ * }
+ * ```
+ */
+export class EnhanceSession {
+  private socket: Socket | null = null;
+  private openedAt = 0;
+  private idleSince = 0;
+  private oneShot = false;
+  private closed = false;
+  /** A connect in flight, settled either way; `close()` waits for it. */
+  private connecting: Promise<unknown> | null = null;
+  private readonly lock = new Lock();
+
+  constructor(private readonly client: KugelAudio) {}
+
+  /**
+   * Open the session's socket now, so the next `stream()` skips the
+   * connection setup. Does nothing while an open socket is reusable. Rejects
+   * with the typed handshake errors of `client.enhance.stream`.
+   */
+  async connect(): Promise<void> {
+    const release = await this.lock.acquire();
     try {
-      ws.close();
-    } catch {
-      // already closed
+      await this.acquireSocket();
+    } finally {
+      release();
     }
   }
+
+  /**
+   * Enhance one audio on the session's socket; same arguments and output as
+   * `client.enhance.stream`. Stopping the iteration early ends this audio and
+   * closes the socket (the next stream opens a new one).
+   */
+  stream(
+    audio: AudioStream | Iterable<PcmChunk> | AsyncIterable<PcmChunk>,
+    options: EnhanceStreamOptions,
+  ): AsyncGenerator<Uint8Array, void, undefined> {
+    const config = streamConfig(audio, options);
+    return this.run(config, audio, options.speaker);
+  }
+
+  /**
+   * Close the socket; the session cannot stream afterwards. A connect still
+   * in flight is waited for and its socket closed too.
+   */
+  async close(): Promise<void> {
+    this.closed = true;
+    await this.connecting;
+    this.drop();
+  }
+
+  private async *run(
+    config: Record<string, unknown>,
+    audio: Iterable<unknown> | AsyncIterable<unknown>,
+    speaker: AudioInput | undefined,
+  ): AsyncGenerator<Uint8Array, void, undefined> {
+    const timeoutMs = this.client.timeout;
+    const full = await withSpeaker(config, speaker);
+    const release = await this.lock.acquire();
+    try {
+      let [socket, reused] = await this.acquireSocket();
+      if (socket === null) {
+        yield* runStream(this.url(false), full, audio, undefined, timeoutMs);
+        return;
+      }
+      let ready: Record<string, unknown>;
+      try {
+        try {
+          ready = await begin(socket, full, timeoutMs, reused);
+        } catch (error) {
+          if (!(error instanceof StaleSocket)) throw error;
+          this.drop();
+          [socket] = await this.acquireSocket();
+          if (socket === null) {
+            throw new ConnectionError('The enhancement session could not be reopened.');
+          }
+          ready = await begin(socket, full, timeoutMs, false);
+        }
+      } catch (error) {
+        // A rate-limit refusal of the config leaves the socket open; after
+        // anything else the server's state for this socket is unknown.
+        if (!(error instanceof RateLimitError) || socket.closed) this.drop();
+        throw error;
+      }
+      if (!('request_id' in ready)) {
+        // The server ignored session=1: it closes after this audio.
+        this.oneShot = true;
+      }
+      let finished = false;
+      try {
+        yield* exchange(socket, full, audio);
+        finished = true;
+      } finally {
+        if (finished && !this.oneShot) this.idleSince = Date.now();
+        else this.drop();
+      }
+    } finally {
+      release();
+    }
+  }
+
+  /** The session socket and whether it was already open, opening one when needed; `[null, false]` when this stream must connect on its own. */
+  private async acquireSocket(): Promise<[Socket | null, boolean]> {
+    if (this.closed) throw new KugelAudioError('The enhancement session is closed.');
+    if (this.oneShot) return [null, false];
+    if (this.socket !== null && this.reusable(this.socket)) return [this.socket, true];
+    this.drop();
+    let socket: Socket;
+    const pending = connectSocket(this.url(true), this.client.timeout);
+    this.connecting = pending.catch(() => undefined);
+    try {
+      socket = await pending;
+    } catch (error) {
+      if (this.closed) throw new KugelAudioError('The enhancement session is closed.');
+      // The open-session limit (429 without Retry-After) or a server that
+      // does not know sessions (400): stream on a connection of its own.
+      const sessionCap = error instanceof RateLimitError && error.retryAfter === undefined;
+      if (!sessionCap && !(error instanceof ValidationError)) throw error;
+      if (error instanceof ValidationError) this.oneShot = true;
+      return [null, false];
+    } finally {
+      this.connecting = null;
+    }
+    if (this.closed) {
+      // close() ran while this socket was connecting.
+      closeSocket(socket);
+      throw new KugelAudioError('The enhancement session is closed.');
+    }
+    this.socket = socket;
+    this.openedAt = this.idleSince = Date.now();
+    return [socket, false];
+  }
+
+  private reusable(socket: Socket): boolean {
+    const now = Date.now();
+    return (
+      !socket.closed &&
+      socket.ws.readyState === WS_OPEN &&
+      now - this.idleSince < SESSION_IDLE_MS &&
+      now - this.openedAt < SESSION_LIFETIME_MS
+    );
+  }
+
+  private drop(): void {
+    const socket = this.socket;
+    this.socket = null;
+    if (socket !== null) closeSocket(socket);
+  }
+
+  private url(session: boolean): string {
+    const query: Record<string, string> = { api_key: this.client.apiKey };
+    if (session) query.session = '1';
+    return this.client.apiWsUrl(ENHANCE_STREAM_PATH, query);
+  }
+}
+
+/** Validate the stream input and build its config (the speaker is added when sending). */
+function streamConfig(audio: unknown, options: EnhanceStreamOptions): Record<string, unknown> {
+  checkModel(options?.model);
+  const rate = streamRate(audio, options.sampleRate);
+  const config: Record<string, unknown> = {
+    type: 'config',
+    model: options.model,
+    task: TASK_NOISE_REMOVAL,
+    sample_rate_hz: rate,
+    encoding: 'pcm_s16le',
+  };
+  if (options.speaker !== undefined) {
+    checkAudio(options.speaker, 'speaker');
+    config.task = TASK_TARGET_SPEAKER_EXTRACTION;
+  }
+  return config;
 }
 
 // -------------------------------------------------------------- resource
@@ -465,21 +766,28 @@ export class EnhanceResource {
     audio: AudioStream | Iterable<PcmChunk> | AsyncIterable<PcmChunk>,
     options: EnhanceStreamOptions,
   ): AsyncGenerator<Uint8Array, void, undefined> {
-    checkModel(options?.model);
-    const rate = streamRate(audio, options.sampleRate);
-    const { speaker } = options;
-    const config: Record<string, unknown> = {
-      type: 'config',
-      model: options.model,
-      task: TASK_NOISE_REMOVAL,
-      sample_rate_hz: rate,
-      encoding: 'pcm_s16le',
-    };
-    if (speaker !== undefined) {
-      checkAudio(speaker, 'speaker');
-      config.task = TASK_TARGET_SPEAKER_EXTRACTION;
-    }
+    const config = streamConfig(audio, options);
     const url = this.client.apiWsUrl(ENHANCE_STREAM_PATH, { api_key: this.client.apiKey });
-    return runStream(url, config, audio, speaker, this.client.timeout);
+    return runStream(url, config, audio, options.speaker, this.client.timeout);
+  }
+
+  /**
+   * A session: one warm WebSocket for many `stream`-style calls.
+   *
+   * Opening a connection costs a TCP, TLS and WebSocket handshake plus the
+   * server's admission; a session pays that once, and `connect()` pays it
+   * before the first audio. Each stream on it is still one request (rate
+   * limits, billing). Close it when done.
+   *
+   * @example
+   * ```typescript
+   * const session = client.enhance.session();
+   * await session.connect();
+   * for await (const chunk of session.stream(input, { model: 'clarity-1' })) play(chunk);
+   * await session.close();
+   * ```
+   */
+  session(): EnhanceSession {
+    return new EnhanceSession(this.client);
   }
 }

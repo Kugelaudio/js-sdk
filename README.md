@@ -122,6 +122,16 @@ last input has been enhanced. Breaking out of the loop closes the connection.
 Errors reject with the usual SDK errors (`ValidationError`,
 `AuthenticationError`, `ConnectionError`, …).
 
+For one audio after another, a session keeps one connection warm and reuses it:
+
+```typescript
+const session = client.enhance.session();
+await session.connect();
+for await (const chunk of session.stream(first, { model: 'clarity-1' })) play(chunk);
+for await (const chunk of session.stream(second, { model: 'clarity-1' })) play(chunk);
+await session.close();
+```
+
 ## LiveKit Agents
 
 ```bash

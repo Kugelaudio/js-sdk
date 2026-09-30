@@ -98,6 +98,7 @@ export type { AudioSource, LoadAudioStreamOptions } from './audio';
 export {
     ENHANCED_SAMPLE_RATE,
     EnhanceResource,
+    EnhanceSession,
     EnhancedAudio,
     TASK_NOISE_REMOVAL,
     TASK_TARGET_SPEAKER_EXTRACTION,
