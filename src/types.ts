@@ -47,6 +47,11 @@ export interface TranscribeOptions {
   filename?: string;
   language?: string;
   model?: 'luchs-1';
+  /**
+   * Your vocabulary for this request: names, brands and domain terms to
+   * spell as written. The server refuses a list over its limits.
+   */
+  boostedPhrases?: string[];
 }
 
 export interface StreamingTranscriptionConfig {

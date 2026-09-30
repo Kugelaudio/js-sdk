@@ -375,6 +375,9 @@ class ASRResource {
     form.append('file', options.audio, options.filename ?? 'audio.wav');
     form.append('model', model);
     if (options.language) form.append('language', options.language);
+    for (const phrase of options.boostedPhrases ?? []) {
+      form.append('boosted_phrases', phrase);
+    }
     return this.client.requestMultipart<TranscriptionResponse>(
       'POST',
       '/v1/audio/transcriptions',

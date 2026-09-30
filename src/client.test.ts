@@ -1180,6 +1180,39 @@ describe('ASRResource', () => {
     vi.unstubAllGlobals();
   });
 
+  it('sends one form field per boosted phrase', async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            text: 'Kargo',
+            transcript: 'Kargo',
+            language: 'en',
+            duration_s: 0.5,
+            model: 'luchs-1',
+            word_alternatives: [],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new KugelAudio({ apiKey: 'test-key-xxx' });
+
+    await client.asr.transcribe({
+      audio: new Blob(['RIFFdata'], { type: 'audio/wav' }),
+      boostedPhrases: ['Kargo', 'Acme, Inc.'],
+    });
+    await client.asr.transcribe({
+      audio: new Blob(['RIFFdata'], { type: 'audio/wav' }),
+    });
+
+    const boosted = fetchMock.mock.calls[0][1].body as FormData;
+    expect(boosted.getAll('boosted_phrases')).toEqual(['Kargo', 'Acme, Inc.']);
+    const plain = fetchMock.mock.calls[1][1].body as FormData;
+    expect(plain.has('boosted_phrases')).toBe(false);
+    vi.unstubAllGlobals();
+  });
+
   it('defaults the outgoing model field to luchs-1 when omitted', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
