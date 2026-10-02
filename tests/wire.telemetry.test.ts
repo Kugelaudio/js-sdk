@@ -50,7 +50,11 @@ function hostedUrl(s: WireServer): string {
 function expectQuietPromptExit(run: ChildRun): void {
   expect(run.strayOutput).toEqual([]);
   expect(run.exitCode).toBe(0);
-  expect(run.closeCallMs).toBeLessThan(50);
+  // A synchronous call cannot wait on the network, so what this bounds is work done
+  // inside close(). A close() that awaited delivery would show the 1 s shutdown
+  // deadline or the 3 s send timeout. 50 ms measured scheduler noise instead: 55 and
+  // 56.9 ms on a 2-CPU CI runner shared by 14 jobs (unit-cache-warm, 2026-10-02).
+  expect(run.closeCallMs).toBeLessThan(250);
   expect(run.exitAfterCloseMs).toBeLessThan(1_500);
 }
 
