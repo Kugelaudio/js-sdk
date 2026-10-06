@@ -3034,24 +3034,33 @@ export class KugelAudio {
   }
 
   /**
-   * Open a pooled keep-alive connection to the API host for `path`, a route
-   * that only accepts POST: the `GET` is refused (405) before authentication
-   * or any work, so it is not billed and not rate limited. Never throws; a
-   * network error or timeout is logged and the next request connects itself.
+   * POST the warm-up route `path` (no body, not billed, not rate limited),
+   * which also leaves a pooled keep-alive connection to the API host for the
+   * next request. Never throws; a network error, a timeout or a non-2xx
+   * answer (e.g. 401 for a bad key) is logged and the next request connects
+   * itself and raises its own typed error.
    * @internal
    */
-  async warmConnection(path: string): Promise<void> {
+  async warmUp(path: string): Promise<void> {
     const url = `${this._apiUrl}${path}`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this._timeout);
     try {
       const response = await fetch(url, {
-        method: 'GET',
+        method: 'POST',
         headers: { ...authHeaders(this._apiKey), ...sdkHeaders() },
         signal: controller.signal,
       });
       // Read the (tiny) body so the connection goes back to the pool.
-      await response.arrayBuffer();
+      const body = await response.text();
+      if (!response.ok) {
+        // KEEP-JUSTIFIED: warming is an optimisation; the first real request
+        // gets the same answer as its own typed error.
+        console.warn(
+          `[KugelAudio] The warm-up at ${url} was refused with HTTP ${response.status} ` +
+            `(${body.slice(0, 200)}); the first request may wait for a cold start.`,
+        );
+      }
     } catch (error) {
       // KEEP-JUSTIFIED: warming is an optimisation; the first real request
       // connects on its own and raises its own typed error.

@@ -35,6 +35,7 @@ export const ENHANCED_SAMPLE_RATE = 24000;
 
 const ENHANCE_PATH = '/v1/audio/enhance';
 const ENHANCE_STREAM_PATH = '/v1/audio/enhance/stream';
+const ENHANCE_WARMUP_PATH = '/v1/audio/enhance/warmup';
 const END_MESSAGE = JSON.stringify({ type: 'end' });
 const NOT_READY = 'The enhancement stream did not become ready in time.';
 const WS_OPEN = 1;
@@ -722,15 +723,21 @@ export class EnhanceResource {
   }
 
   /**
-   * Open the connection `generate` uses, so the first request skips the
-   * connection setup (TCP and TLS).
+   * Ready enhancement before the first request: start it on the server and
+   * open the connection `generate` uses.
    *
-   * Sends one `GET` to the enhancement path, which only accepts `POST`: the
-   * server refuses it before authentication or any processing, so it is not
-   * billed and does not count against rate limits. Safe to call any number of
-   * times; call it shortly before the first request, since idle connections
-   * are closed after a few seconds. Never rejects: a network error is logged
-   * and the first request then connects as usual.
+   * Enhancement capacity scales down when nobody uses it, so the first
+   * request after a quiet period can wait several seconds. This sends the
+   * warm-up request (`POST /v1/audio/enhance/warmup`), which the server
+   * answers at once while it readies enhancement in the background; it is
+   * not billed and does not count against rate limits. It also opens the
+   * connection (TCP and TLS) the next request reuses. Safe to call any number
+   * of times; call it as soon as you know audio is coming, since idle
+   * connections are closed after a few seconds.
+   *
+   * Never rejects: a network error, a timeout, or a refused warm-up (for
+   * example 401 for a bad API key) is logged with `console.warn`, and the
+   * first request then connects as usual and throws its own error.
    *
    * @example
    * ```typescript
@@ -739,7 +746,7 @@ export class EnhanceResource {
    * ```
    */
   async prewarm(): Promise<void> {
-    await this.client.warmConnection(ENHANCE_PATH);
+    await this.client.warmUp(ENHANCE_WARMUP_PATH);
   }
 
   /**

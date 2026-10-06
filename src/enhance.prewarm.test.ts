@@ -36,28 +36,36 @@ function wav(): Uint8Array {
 
 const OUTPUT = wav();
 
+const WARMUP = 'POST /v1/audio/enhance/warmup';
+const ENHANCE = 'POST /v1/audio/enhance';
+
 interface CountingServer {
   url: string;
   connections: () => number;
-  methods: string[];
+  requests: string[];
+  warmupAuth: (string | undefined)[];
+  warmupStatus: number;
   close: () => Promise<void>;
 }
 
 async function countingServer(): Promise<CountingServer> {
   let connections = 0;
-  const methods: string[] = [];
+  const state = { requests: [] as string[], warmupAuth: [] as (string | undefined)[], warmupStatus: 202 };
   const server: Server = createServer((req, res) => {
-    methods.push(req.method ?? '');
+    const request = `${req.method} ${req.url}`;
+    state.requests.push(request);
     req.resume();
     req.on('end', () => {
-      if (req.method === 'POST') {
+      if (request === WARMUP) {
+        // What the enhance service answers on its warm-up route.
+        state.warmupAuth.push(req.headers.authorization);
+        const ok = state.warmupStatus === 202;
+        const body = ok ? '{"status":"warming"}' : '{"detail":"Invalid API key"}';
+        res.writeHead(state.warmupStatus, { 'content-type': 'application/json', 'content-length': body.length });
+        res.end(body);
+      } else {
         res.writeHead(200, { 'content-type': 'audio/wav', 'content-length': OUTPUT.length });
         res.end(OUTPUT);
-      } else {
-        // What the enhance service answers for a GET on its POST-only route.
-        const body = '{"detail":"Method Not Allowed"}';
-        res.writeHead(405, { allow: 'POST', 'content-type': 'application/json', 'content-length': body.length });
-        res.end(body);
       }
     });
   });
@@ -66,16 +74,15 @@ async function countingServer(): Promise<CountingServer> {
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
-  return {
+  return Object.assign(state, {
     url: `http://127.0.0.1:${port}`,
     connections: () => connections,
-    methods,
     close: () =>
       new Promise<void>((resolve) => {
         server.closeAllConnections();
         server.close(() => resolve());
       }),
-  };
+  });
 }
 
 let server: CountingServer | null = null;
@@ -97,7 +104,7 @@ describe('client.enhance connection reuse', () => {
       expect(result.sampleRate).toBe(24000);
       await macrotask();
     }
-    expect(server.methods).toEqual(Array(5).fill('POST'));
+    expect(server.requests).toEqual(Array(5).fill(ENHANCE));
     expect(server.connections()).toBe(1);
   });
 
@@ -110,15 +117,26 @@ describe('client.enhance connection reuse', () => {
     expect(server.connections()).toBeLessThanOrEqual(2);
   });
 
-  it('prewarm opens the connection and generate reuses it', async () => {
+  it('prewarm posts the warm-up with the API key and generate reuses its connection', async () => {
     server = await countingServer();
     const client = new KugelAudio({ apiKey: 'test-key', apiUrl: server.url });
     await client.enhance.prewarm();
     expect(server.connections()).toBe(1);
     await client.enhance.prewarm(); // idempotent: the same connection again
     await client.enhance.generate(wav(), { model: 'clarity-1' });
-    expect(server.methods).toEqual(['GET', 'GET', 'POST']);
+    expect(server.requests).toEqual([WARMUP, WARMUP, ENHANCE]);
+    expect(server.warmupAuth).toEqual(['Bearer test-key', 'Bearer test-key']);
     expect(server.connections()).toBe(1);
+  });
+
+  it('prewarm resolves and warns with the status when the warm-up is refused', async () => {
+    server = await countingServer();
+    server.warmupStatus = 401;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const client = new KugelAudio({ apiKey: 'bad-key', apiUrl: server.url });
+    await expect(client.enhance.prewarm()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledOnce();
+    expect(String(warn.mock.calls[0][0])).toContain('401');
   });
 
   it('prewarm resolves and warns on a network error', async () => {
