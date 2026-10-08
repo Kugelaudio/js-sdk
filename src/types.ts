@@ -78,6 +78,11 @@ export interface StreamingTranscriptionResult {
   /** Backend model identity is populated on final frames. */
   model?: string;
   model_revision?: string;
+  /**
+   * Detected language, e.g. `'German'` or `'English'`. Set on the turn's
+   * revision frame; absent on partials.
+   */
+  language?: string;
   turn_end_reason?:
     | 'client_end_of_speech'
     | 'model_end_of_turn'
