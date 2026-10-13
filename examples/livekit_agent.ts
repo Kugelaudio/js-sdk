@@ -40,7 +40,7 @@ export default defineAgent({
     await ctx.connect();
 
     const tts = new KugelAudioTTS({
-      model: 'kugel-3',
+      model: 'kugel-3.5',
       voiceId: VOICE_ID,
       language: 'en', // skip server-side language auto-detection for lower latency
       sampleRate: 24000,

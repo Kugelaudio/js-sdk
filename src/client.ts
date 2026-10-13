@@ -743,7 +743,7 @@ class TTSResource {
    *
    *   const readable = client.tts.toReadable({
    *     text: req.body.message.text,
-   *     modelId: 'kugel-3',
+   *     modelId: 'kugel-3.5',
    *     sampleRate: req.body.message.sampleRate,
    *     language: 'en',
    *   });
@@ -1071,7 +1071,7 @@ class TTSResource {
 
       ws.send(JSON.stringify({
         text: options.text,
-        model_id: options.modelId || 'kugel-3',
+        model_id: options.modelId || 'kugel-3.5',
         voice_id: options.voiceId,
         cfg_scale: clampCfgScale(options.cfgScale) ?? 2.0,
         ...(options.temperature !== undefined && { temperature: options.temperature }),
@@ -1120,7 +1120,7 @@ class TTSResource {
         // Send TTS request
         ws.send(JSON.stringify({
           text: options.text,
-          model_id: options.modelId || 'kugel-3',
+          model_id: options.modelId || 'kugel-3.5',
           voice_id: options.voiceId,
           cfg_scale: clampCfgScale(options.cfgScale) ?? 2.0,
           max_new_tokens: options.maxNewTokens ?? 2048,
@@ -2778,7 +2778,7 @@ class StreamingSession {
  * // Generate audio
  * const audio = await client.tts.generate({
  *   text: 'Hello, world!',
- *   modelId: 'kugel-3',
+ *   modelId: 'kugel-3.5',
  * });
  * ```
  */

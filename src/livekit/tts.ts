@@ -53,7 +53,7 @@ export interface TTSOptions {
    * is stripped before auth.
    */
   apiKey?: string;
-  /** TTS model. Defaults to `'kugel-3'`. */
+  /** TTS model. Defaults to `'kugel-3.5'`. */
   model?: TTSModels | string;
   /** Voice id. `null`/omitted uses the server default voice. */
   voiceId?: number | null;
@@ -160,7 +160,7 @@ function reportTerminalError(instance: TTS, error: APIError): void {
  * import { AgentSession } from '@livekit/agents';
  *
  * const session = new AgentSession({
- *   tts: new TTS({ voiceId: 1071, model: 'kugel-3', language: 'en' }),
+ *   tts: new TTS({ voiceId: 1071, model: 'kugel-3.5', language: 'en' }),
  *   // ...stt, llm, vad
  * });
  * ```

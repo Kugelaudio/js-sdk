@@ -10,7 +10,7 @@
  * ```ts
  * import { TTS } from 'kugelaudio/livekit';
  *
- * const tts = new TTS({ voiceId: 1071, model: 'kugel-3', language: 'en' });
+ * const tts = new TTS({ voiceId: 1071, model: 'kugel-3.5', language: 'en' });
  * ```
  *
  * @packageDocumentation

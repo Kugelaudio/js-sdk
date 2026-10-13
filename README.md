@@ -23,7 +23,7 @@ const client = new KugelAudio({ apiKey: 'your_api_key' });
 
 const audio = await client.tts.generate({
   text: 'Hello, world!',
-  modelId: 'kugel-3',
+  modelId: 'kugel-3.5',
   voiceId: 1071,
   language: 'en',   // skip auto-detection (~150ms) when you know the language
 });
@@ -32,7 +32,7 @@ const audio = await client.tts.generate({
 console.log(`${audio.durationMs}ms in ${audio.generationMs}ms (RTF ${audio.rtf})`);
 ```
 
-[`kugel-3`](https://docs.kugelaudio.com/models) is the current model; legacy IDs
+[`kugel-3.5`](https://docs.kugelaudio.com/models) is the current model; legacy IDs
 (`kugel-1-turbo`, `kugel-2.5`, …) are still accepted.
 
 ## Streaming
@@ -141,7 +141,7 @@ npm install kugelaudio @livekit/agents @livekit/rtc-node
 ```typescript
 import { TTS as KugelAudioTTS } from 'kugelaudio/livekit';
 
-const tts = new KugelAudioTTS({ model: 'kugel-3', voiceId: 1071, language: 'en' });
+const tts = new KugelAudioTTS({ model: 'kugel-3.5', voiceId: 1071, language: 'en' });
 tts.on('error', ({ error }) => console.error('Synthesis failed:', error));
 tts.prewarm();   // open the WebSocket ahead of the first response
 ```

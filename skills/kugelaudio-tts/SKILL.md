@@ -125,7 +125,7 @@ recovery): <https://docs.kugelaudio.com/guides/voice-prompting>.
 | Several independent speakers on one connection | a **multi-context session** |
 | LiveKit / Pipecat voice agent | the shipped integration, not a hand-rolled one |
 
-Use `kugel-3` for new integrations. Older IDs (`kugel-1-turbo`, `kugel-2.5`, …)
+Use `kugel-3.5` for new integrations. Older IDs (`kugel-1-turbo`, `kugel-2.5`, …)
 still work but alias to the current model.
 
 ## Deployment: hosted vs on-premise

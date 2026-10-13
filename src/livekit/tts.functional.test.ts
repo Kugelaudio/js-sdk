@@ -62,7 +62,7 @@ describe('LiveKit plugin against mock /ws/tts/multi server', () => {
     const [ctx] = [...server.contexts.values()];
     expect(ctx!.configMessages).toHaveLength(1);
     expect(ctx!.configMessages[0]).toMatchObject({
-      model_id: 'kugel-3',
+      model_id: 'kugel-3.5',
       sample_rate: 24000,
       language: 'en',
       normalize: true,

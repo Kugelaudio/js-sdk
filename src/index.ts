@@ -18,13 +18,13 @@
  * // Generate audio (non-streaming)
  * const audio = await client.tts.generate({
  *   text: 'Hello, world!',
- *   modelId: 'kugel-3',
+ *   modelId: 'kugel-3.5',
  *   voiceId: 123,
  * });
  *
  * // Generate audio (streaming)
  * await client.tts.stream(
- *   { text: 'Hello, world!', modelId: 'kugel-3' },
+ *   { text: 'Hello, world!', modelId: 'kugel-3.5' },
  *   {
  *     onChunk: (chunk) => {
  *       // Process audio chunk

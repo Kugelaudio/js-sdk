@@ -342,7 +342,7 @@ export interface WordTimestamp {
 export interface GenerateOptions {
   /** Text to synthesize */
   text: string;
-  /** Model to use. Default: 'kugel-3'. Legacy ids (kugel-2.5, kugel-1-turbo, …) still accepted; they alias to kugel-3 server-side. */
+  /** Model to use. Default: 'kugel-3.5'. Legacy ids (kugel-2.5, kugel-1-turbo, …) still accepted; they alias to kugel-3.5 server-side. */
   modelId?: string;
   /** Voice ID to use */
   voiceId?: number;
@@ -437,7 +437,7 @@ export interface GenerateOptions {
 export interface StreamConfig {
   /** Voice ID to use */
   voiceId?: number;
-  /** Model ID. Default: 'kugel-3'. Legacy ids still accepted; they alias to kugel-3 server-side. */
+  /** Model ID. Default: 'kugel-3.5'. Legacy ids still accepted; they alias to kugel-3.5 server-side. */
   modelId?: string;
   /** Classifier-free guidance scale. Clamped to [1.2, 2.5] (default: 2.0). */
   cfgScale?: number;
