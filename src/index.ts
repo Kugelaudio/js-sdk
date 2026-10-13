@@ -49,6 +49,7 @@ export type {
     BulkReplaceResult,
     ContextVoiceSettings,
     CreateDictionaryOptions,
+    AddVoiceReferenceOptions,
     CreateVoiceOptions,
     Dictionary,
     DictionaryEntry,

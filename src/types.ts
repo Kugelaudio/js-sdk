@@ -270,6 +270,13 @@ export interface VoiceReference {
 export interface CreateVoiceOptions {
   name: string;
   sex: string;
+  /**
+   * Pass `true` to confirm that you are the speaker of the recordings or that
+   * you have the speaker's permission to create a synthetic voice from them.
+   * Required: the API rejects the request with `SPEAKER_CONSENT_REQUIRED`
+   * otherwise and records the confirmation with your account.
+   */
+  speakerConsent: boolean;
   description?: string;
   category?: string;
   age?: string;
@@ -279,6 +286,21 @@ export interface CreateVoiceOptions {
   sampleText?: string;
   /** Reference audio files (File objects in browser, Buffer/Blob in Node.js) */
   referenceFiles?: Array<File | Blob>;
+}
+
+/**
+ * Options for adding reference audio to a voice.
+ */
+export interface AddVoiceReferenceOptions {
+  /**
+   * Pass `true` to confirm that you are the speaker of this recording or that
+   * you have the speaker's permission to create a synthetic voice from it.
+   * Required: the API rejects the upload with `SPEAKER_CONSENT_REQUIRED`
+   * otherwise.
+   */
+  speakerConsent: boolean;
+  /** Transcript of the reference audio. */
+  referenceText?: string;
 }
 
 /**

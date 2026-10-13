@@ -92,3 +92,51 @@ describe('VoicesResource.generateSample()', () => {
     expect(sample.sampleUrl).toBe('https://cdn.example/sample.wav');
   });
 });
+
+describe('speaker consent (voice create and reference upload)', () => {
+  const voiceRow = { id: 1071, voice_id: 1071, name: 'Anna' };
+
+  async function metadataOf(fetchMock: ReturnType<typeof stubFetch>): Promise<Record<string, unknown>> {
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    return JSON.parse(await (form.get('metadata') as Blob).text());
+  }
+
+  it('create() sends speaker_consent in the metadata part', async () => {
+    const fetchMock = stubFetch(jsonResponse(voiceRow));
+    const client = new KugelAudio({ apiKey: 'test-key-xxx' });
+
+    await client.voices.create({ name: 'Anna', sex: 'female', speakerConsent: true });
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.kugelaudio.com/v1/voices');
+    expect(await metadataOf(fetchMock)).toMatchObject({ name: 'Anna', speaker_consent: true });
+  });
+
+  it('create() sends a false consent as false, for the server to refuse', async () => {
+    const fetchMock = stubFetch(jsonResponse(voiceRow));
+    const client = new KugelAudio({ apiKey: 'test-key-xxx' });
+
+    await client.voices.create({ name: 'Anna', sex: 'female', speakerConsent: false });
+
+    expect(await metadataOf(fetchMock)).toMatchObject({ speaker_consent: false });
+  });
+
+  it('addReference() sends speaker_consent and the transcript as form fields', async () => {
+    const fetchMock = stubFetch(
+      jsonResponse({ id: 456, voice_id: 1071, name: 'ref.wav', s3_path: 'voices/1071/ref.wav' }),
+    );
+    const client = new KugelAudio({ apiKey: 'test-key-xxx' });
+
+    await client.voices.addReference(1071, new Blob(['audio']), {
+      speakerConsent: true,
+      referenceText: 'Hallo',
+    });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.kugelaudio.com/v1/voices/1071/references',
+    );
+    const form = fetchMock.mock.calls[0][1].body as FormData;
+    expect(form.get('speaker_consent')).toBe('true');
+    expect(form.get('reference_text')).toBe('Hallo');
+    expect(form.get('file')).toBeInstanceOf(Blob);
+  });
+});

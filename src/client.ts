@@ -20,6 +20,7 @@ import {
 import type {
     AudioChunk,
     AudioResponse,
+    AddVoiceReferenceOptions,
     CreateVoiceOptions,
     EffectiveSettings,
     GenerateOptions,
@@ -457,6 +458,7 @@ class VoicesResource {
       supported_languages: options.supportedLanguages ?? ['en'],
       is_public: options.isPublic ?? false,
       sample_text: options.sampleText ?? '',
+      speaker_consent: options.speakerConsent,
     };
 
     const formData = new FormData();
@@ -519,17 +521,18 @@ class VoicesResource {
    *
    * @param voiceId - Voice ID
    * @param file - Audio file (File in browser, Blob in Node.js)
-   * @param referenceText - Optional transcript of the reference audio
+   * @param options - The speaker consent (required) and an optional transcript
    */
   async addReference(
     voiceId: number,
     file: File | Blob,
-    referenceText?: string,
+    options: AddVoiceReferenceOptions,
   ): Promise<VoiceReference> {
     const formData = new FormData();
     formData.append('file', file);
-    if (referenceText) {
-      formData.append('reference_text', referenceText);
+    formData.append('speaker_consent', options.speakerConsent ? 'true' : 'false');
+    if (options.referenceText) {
+      formData.append('reference_text', options.referenceText);
     }
 
     const r = await this.client.requestMultipart<any>(
