@@ -86,7 +86,8 @@ export interface StreamingTranscriptionResult {
   turn_end_reason?:
     | 'client_end_of_speech'
     | 'model_end_of_turn'
-    | 'silence_timeout';
+    | 'silence_timeout'
+    | 'max_duration';
   turn_end_confidence?: number;
   turn_end_inference_ms?: number;
   word_alternatives: WordAlternatives[];
