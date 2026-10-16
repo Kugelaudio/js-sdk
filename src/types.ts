@@ -59,8 +59,14 @@ export interface StreamingTranscriptionConfig {
   sample_rate: number;
   language?: string;
   boosted_phrases?: string[];
-  vad_silence_signals?: boolean;
-  server_flush?: boolean;
+  /**
+   * How the server ends a turn. `'kugelturn'`: the server's VAD marks the
+   * pause and KugelTurn decides from 300 ms of it, ending the turn at 1000 ms
+   * if still undecided. `'vad'`: a 1000 ms pause ends the turn. `'manual'`:
+   * only your `end_of_speech` (or the maximum duration) ends it. Omitted uses
+   * the deployment default: `'kugelturn'` where KugelTurn runs, else `'vad'`.
+   */
+  turn_detection?: 'kugelturn' | 'vad' | 'manual';
 }
 
 export interface StreamingAudioChunk {
