@@ -1153,7 +1153,7 @@ describe('ASRResource', () => {
           transcript: 'Ich heiße Müller.',
           language: 'de',
           duration_s: 1.5,
-          model: 'luchs-1',
+          model: 'test-model',
           model_revision: '7278e1e70fe206f11671096ffdd38061171dd6e5',
           word_alternatives: [],
         }),
@@ -1169,13 +1169,14 @@ describe('ASRResource', () => {
     });
 
     expect(result.text).toBe('Ich heiße Müller.');
-    expect(result.model).toBe('luchs-1');
+    expect(result.model).toBe('test-model');
     expect(result.model_revision).toBe('7278e1e70fe206f11671096ffdd38061171dd6e5');
     expect(fetchMock.mock.calls[0][0]).toBe(
       'https://api.kugelaudio.com/v1/audio/transcriptions',
     );
     const body = fetchMock.mock.calls[0][1].body as FormData;
-    expect(body.get('model')).toBe('luchs-1');
+    // No model given: the field is left out and the API uses its default.
+    expect(body.has('model')).toBe(false);
     expect(body.get('language')).toBe('de');
     vi.unstubAllGlobals();
   });
@@ -1189,7 +1190,7 @@ describe('ASRResource', () => {
             transcript: 'Kargo',
             language: 'en',
             duration_s: 0.5,
-            model: 'luchs-1',
+            model: 'test-model',
             word_alternatives: [],
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
@@ -1213,7 +1214,7 @@ describe('ASRResource', () => {
     vi.unstubAllGlobals();
   });
 
-  it('defaults the outgoing model field to luchs-1 when omitted', async () => {
+  it('sends a given model verbatim', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -1221,7 +1222,7 @@ describe('ASRResource', () => {
           transcript: 'hi',
           language: 'en',
           duration_s: 0.5,
-          model: 'luchs-1',
+          model: 'test-model',
           word_alternatives: [],
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
@@ -1232,10 +1233,11 @@ describe('ASRResource', () => {
 
     await client.asr.transcribe({
       audio: new Blob(['RIFFdata'], { type: 'audio/wav' }),
+      model: 'test-model',
     });
 
     const body = fetchMock.mock.calls[0][1].body as FormData;
-    expect(body.get('model')).toBe('luchs-1');
+    expect(body.getAll('model')).toEqual(['test-model']);
     vi.unstubAllGlobals();
   });
 });

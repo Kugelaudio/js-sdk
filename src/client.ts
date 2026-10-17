@@ -371,10 +371,9 @@ class ASRResource {
   constructor(private client: KugelAudio) {}
 
   async transcribe(options: TranscribeOptions): Promise<TranscriptionResponse> {
-    const model = options.model ?? 'luchs-1';
     const form = new FormData();
     form.append('file', options.audio, options.filename ?? 'audio.wav');
-    form.append('model', model);
+    if (options.model !== undefined) form.append('model', options.model);
     if (options.language) form.append('language', options.language);
     for (const phrase of options.boostedPhrases ?? []) {
       form.append('boosted_phrases', phrase);

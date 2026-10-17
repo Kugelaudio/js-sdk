@@ -46,7 +46,8 @@ export interface TranscribeOptions {
   audio: Blob;
   filename?: string;
   language?: string;
-  model?: 'luchs-1';
+  /** The speech-to-text model ID, sent as given. Omit it to use the API's default model. */
+  model?: string;
   /**
    * Your vocabulary for this request: names, brands and domain terms to
    * spell as written. The server refuses a list over its limits.
