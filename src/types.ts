@@ -53,6 +53,14 @@ export interface TranscribeOptions {
    * spell as written. The server refuses a list over its limits.
    */
   boostedPhrases?: string[];
+  /** The project whose dictionaries apply. Omit it to use the API key's project. */
+  projectId?: number;
+  /**
+   * The project dictionaries whose words are applied as phrases after
+   * {@link boostedPhrases}. Omit it to apply every active dictionary of the
+   * project; `[]` applies none.
+   */
+  dictionaryIds?: number[];
 }
 
 export interface StreamingTranscriptionConfig {
@@ -60,6 +68,14 @@ export interface StreamingTranscriptionConfig {
   sample_rate: number;
   language?: string;
   boosted_phrases?: string[];
+  /** The project whose dictionaries apply. Omit it to use the API key's project. */
+  project_id?: number;
+  /**
+   * The project dictionaries whose words are applied as phrases after
+   * `boosted_phrases`. Omit it to apply every active dictionary of the
+   * project; `[]` applies none.
+   */
+  dictionary_ids?: number[];
   /**
    * How the server ends a turn. `'kugelturn'`: the server's VAD marks the
    * pause and KugelTurn decides from 300 ms of it, ending the turn at 1000 ms

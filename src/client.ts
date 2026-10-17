@@ -378,6 +378,13 @@ class ASRResource {
     for (const phrase of options.boostedPhrases ?? []) {
       form.append('boosted_phrases', phrase);
     }
+    if (options.projectId !== undefined) form.append('project_id', String(options.projectId));
+    if (options.dictionaryIds !== undefined) {
+      // Repeated form fields cannot carry an empty list: one empty
+      // `dictionary_ids` field is the multipart spelling of `[]`.
+      const values = options.dictionaryIds.length > 0 ? options.dictionaryIds.map(String) : [''];
+      for (const value of values) form.append('dictionary_ids', value);
+    }
     return this.client.requestMultipart<TranscriptionResponse>(
       'POST',
       '/v1/audio/transcriptions',

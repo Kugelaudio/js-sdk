@@ -1214,6 +1214,72 @@ describe('ASRResource', () => {
     vi.unstubAllGlobals();
   });
 
+  it('sends project_id and one form field per dictionary id', async () => {
+    const fetchMock = vi.fn().mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            text: 'hi',
+            transcript: 'hi',
+            language: 'en',
+            duration_s: 0.5,
+            model: 'test-model',
+            word_alternatives: [],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new KugelAudio({ apiKey: 'test-key-xxx' });
+
+    await client.asr.transcribe({
+      audio: new Blob(['RIFFdata'], { type: 'audio/wav' }),
+      projectId: 42,
+      dictionaryIds: [7, 9],
+    });
+    await client.asr.transcribe({
+      audio: new Blob(['RIFFdata'], { type: 'audio/wav' }),
+    });
+
+    const selected = fetchMock.mock.calls[0][1].body as FormData;
+    expect(selected.getAll('project_id')).toEqual(['42']);
+    expect(selected.getAll('dictionary_ids')).toEqual(['7', '9']);
+    const plain = fetchMock.mock.calls[1][1].body as FormData;
+    expect(plain.has('project_id')).toBe(false);
+    expect(plain.has('dictionary_ids')).toBe(false);
+    vi.unstubAllGlobals();
+  });
+
+  it('sends an empty dictionary selection as one empty dictionary_ids field', async () => {
+    // Repeated form fields cannot carry []; one empty dictionary_ids field is
+    // the multipart spelling of "no dictionaries". Dropping it would apply
+    // every active dictionary instead.
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          text: 'hi',
+          transcript: 'hi',
+          language: 'en',
+          duration_s: 0.5,
+          model: 'test-model',
+          word_alternatives: [],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new KugelAudio({ apiKey: 'test-key-xxx' });
+
+    await client.asr.transcribe({
+      audio: new Blob(['RIFFdata'], { type: 'audio/wav' }),
+      dictionaryIds: [],
+    });
+
+    const body = fetchMock.mock.calls[0][1].body as FormData;
+    expect(body.getAll('dictionary_ids')).toEqual(['']);
+    vi.unstubAllGlobals();
+  });
+
   it('sends a given model verbatim', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
