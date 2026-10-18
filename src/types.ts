@@ -84,6 +84,12 @@ export interface StreamingTranscriptionConfig {
    * the deployment default: `'kugelturn'` where KugelTurn runs, else `'vad'`.
    */
   turn_detection?: 'kugelturn' | 'vad' | 'manual';
+  /**
+   * How readily KugelTurn ends a turn, with `turn_detection: 'kugelturn'`
+   * only. `'responsive'` (the default) ends turns soonest; `'conservative'`
+   * holds longer through a pause mid-thought, so fewer turns are cut off early.
+   */
+  turn_detection_level?: 'responsive' | 'conservative';
 }
 
 export interface StreamingAudioChunk {
