@@ -78,10 +78,9 @@ export interface StreamingTranscriptionConfig {
   dictionary_ids?: number[];
   /**
    * How the server ends a turn. `'kugelturn'`: the server's VAD marks the
-   * pause and KugelTurn decides from 300 ms of it, ending the turn at 15000 ms
-   * if still undecided, unless the speaker asked for a moment ("wait", "hold
-   * on"), which keeps the turn open until they speak again. `'vad'`: a 1000 ms
-   * pause ends the turn. `'manual'`:
+   * pause and KugelTurn decides from 200 ms of it, ending the turn at 3500 ms
+   * (3000 ms at the `'conservative'` level) if still undecided. `'vad'`: a
+   * 1000 ms pause ends the turn. `'manual'`:
    * only your `end_of_speech` (or the maximum duration) ends it. Omitted uses
    * the deployment default: `'kugelturn'` where KugelTurn runs, else `'vad'`.
    */
