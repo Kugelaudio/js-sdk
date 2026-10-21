@@ -111,6 +111,9 @@ export type {
     PcmChunk,
 } from './enhance';
 
+// Speech to text
+export type { TranscriptionStreamOptions } from './asr';
+
 // Errors
 export {
     AuthenticationError,

@@ -22,9 +22,9 @@ import {
   ValidationError,
   classifyWsClose,
   classifyWsFrame,
-  classifyWsHandshakeError,
 } from './errors';
-import { captureHandshakeRejection, handshakeDeadline, handshakeRejectionOf } from './handshake';
+import { captureHandshakeRejection } from './handshake';
+import { EventQueue, openSocket, parseText, sleep } from './socket-stream';
 import { arrayBufferToBase64, createWavFile } from './utils';
 import { getWebSocket, loadWebSocket } from './websocket';
 
@@ -214,68 +214,6 @@ function frameError(data: Record<string, unknown>): KugelAudioError {
   return classifyWsFrame(data as Parameters<typeof classifyWsFrame>[0]);
 }
 
-type StreamEvent =
-  | { kind: 'message'; data: unknown }
-  | { kind: 'close'; code?: number; reason?: string }
-  | { kind: 'failure'; error: unknown };
-
-/** Buffers socket events until the generator asks for the next one. */
-class EventQueue {
-  private items: StreamEvent[] = [];
-  private waiter: ((event: StreamEvent) => void) | null = null;
-
-  push(event: StreamEvent): void {
-    const waiter = this.waiter;
-    if (waiter) {
-      this.waiter = null;
-      waiter(event);
-    } else {
-      this.items.push(event);
-    }
-  }
-
-  next(timeoutMs?: number): Promise<StreamEvent> {
-    const item = this.items.shift();
-    if (item) return Promise.resolve(item);
-    return new Promise((resolve, reject) => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      if (timeoutMs !== undefined) {
-        timer = setTimeout(() => {
-          this.waiter = null;
-          reject(new ConnectionError(NOT_READY));
-        }, timeoutMs);
-      }
-      this.waiter = (event) => {
-        if (timer) clearTimeout(timer);
-        resolve(event);
-      };
-    });
-  }
-}
-
-function openSocket(ws: WebSocket, timeoutMs: number): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const deadline = handshakeDeadline(ws, timeoutMs, reject);
-    ws.onopen = () => {
-      if (deadline.opened()) resolve();
-    };
-    ws.onerror = (event: unknown) => {
-      deadline.failed();
-      // A refused upgrade: the kept rejection response, else the transport error.
-      const failure =
-        handshakeRejectionOf(ws) ?? (event as { error?: unknown } | null)?.error ?? event;
-      reject(
-        classifyWsHandshakeError(failure) ??
-          new ConnectionError('KugelAudio WebSocket handshake failed.'),
-      );
-    };
-    ws.onclose = (event: { code?: number; reason?: string }) => {
-      deadline.failed();
-      reject(classifyWsClose(event.code, event.reason));
-    };
-  });
-}
-
 /** Binary frame payload as bytes, or `null` for a text frame. */
 async function binaryPayload(data: unknown): Promise<Uint8Array | null> {
   if (typeof data === 'string') return null;
@@ -285,17 +223,6 @@ async function binaryPayload(data: unknown): Promise<Uint8Array | null> {
   }
   return null;
 }
-
-function parseText(data: unknown): Record<string, unknown> {
-  try {
-    const parsed = JSON.parse(String(data));
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Send every input chunk, then `end`. Stops quietly once the socket closes. */
 async function pump(
@@ -389,7 +316,7 @@ async function begin(
     throw new ConnectionError('The enhancement connection is closed.');
   }
   socket.ws.send(JSON.stringify(config));
-  const first = await socket.events.next(timeoutMs);
+  const first = await socket.events.next(timeoutMs, NOT_READY);
   if (first.kind === 'close') {
     if (reused) throw new StaleSocket();
     throw classifyWsClose(first.code, first.reason);

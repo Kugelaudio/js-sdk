@@ -66,7 +66,10 @@ export interface TranscribeOptions {
 export interface StreamingTranscriptionConfig {
   type: 'config';
   sample_rate: number;
-  language?: string;
+  /** The speech-to-text model ID, sent as given. Omitted uses the default. */
+  model?: string;
+  /** A language code such as `'de'`, or several the audio may be in. */
+  language?: string | string[];
   boosted_phrases?: string[];
   /** The project whose dictionaries apply. Omit it to use the API key's project. */
   project_id?: number;
@@ -109,10 +112,16 @@ export interface StreamingTranscriptionResult {
   model?: string;
   model_revision?: string;
   /**
-   * Detected language, e.g. `'German'` or `'English'`. Set on the turn's
-   * revision frame; absent on partials.
+   * Code of the language the turn was transcribed in, e.g. `'de'`. Set on
+   * the turn's revision frame; absent on partials.
    */
   language?: string;
+  /**
+   * `true` on the `alternatives` frame that revises the turn: its
+   * `partial_text` is a more accurate transcript of the whole turn than the
+   * final's, and its `word_alternatives` index this frame's text.
+   */
+  revises_final?: boolean;
   turn_end_reason?:
     | 'client_end_of_speech'
     | 'model_end_of_turn'

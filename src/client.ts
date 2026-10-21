@@ -4,6 +4,7 @@
 
 import { Diagnostics, operationForPath } from './diagnostics';
 import type { Operation } from './diagnostics';
+import { ASRResource } from './asr';
 import { DictionariesResource } from './dictionaries';
 import { EnhanceResource } from './enhance';
 import {
@@ -30,8 +31,6 @@ import type {
     SettingsUpdate,
     StreamCallbacks,
     StreamConfig,
-    TranscribeOptions,
-    TranscriptionResponse,
     StreamingSessionCallbacks,
     UpdateVoiceOptions,
     VoiceDetail,
@@ -363,33 +362,6 @@ class ModelsResource {
       maxInputLength: m.max_input_length || 5000,
       sampleRate: m.sample_rate || 24000,
     }));
-  }
-}
-
-/** Speech-to-text uploads through public KugelAudio ingress. */
-class ASRResource {
-  constructor(private client: KugelAudio) {}
-
-  async transcribe(options: TranscribeOptions): Promise<TranscriptionResponse> {
-    const form = new FormData();
-    form.append('file', options.audio, options.filename ?? 'audio.wav');
-    if (options.model !== undefined) form.append('model', options.model);
-    if (options.language) form.append('language', options.language);
-    for (const phrase of options.boostedPhrases ?? []) {
-      form.append('boosted_phrases', phrase);
-    }
-    if (options.projectId !== undefined) form.append('project_id', String(options.projectId));
-    if (options.dictionaryIds !== undefined) {
-      // Repeated form fields cannot carry an empty list: one empty
-      // `dictionary_ids` field is the multipart spelling of `[]`.
-      const values = options.dictionaryIds.length > 0 ? options.dictionaryIds.map(String) : [''];
-      for (const value of values) form.append('dictionary_ids', value);
-    }
-    return this.client.requestMultipart<TranscriptionResponse>(
-      'POST',
-      '/v1/audio/transcriptions',
-      form,
-    );
   }
 }
 
