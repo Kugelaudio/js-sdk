@@ -1,3 +1,5 @@
+## [kugelaudio-v1.5.0](https://github.com/Kugelaudio/KugelAudio/compare/js-sdk-v1.4.0...js-sdk-v1.5.0) (2026-10-21)
+
 ## [kugelaudio-v1.4.0](https://github.com/Kugelaudio/KugelAudio/compare/js-sdk-v1.3.0...js-sdk-v1.4.0) (2026-10-21)
 
 ## [kugelaudio-v1.3.0](https://github.com/Kugelaudio/KugelAudio/compare/js-sdk-v1.2.0...js-sdk-v1.3.0) (2026-09-29)
