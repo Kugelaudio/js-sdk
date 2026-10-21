@@ -46,8 +46,8 @@ export function isWsErrorCloseCode(code: number | undefined): boolean {
   return code !== undefined && WS_ERROR_CLOSE_CODES.has(code);
 }
 
-const API_KEYS_URL = 'https://app.kugelaudio.com/settings/api-keys';
-const BILLING_URL = 'https://app.kugelaudio.com/billing';
+const API_KEYS_URL = 'https://www.kugelaudio.com/dashboard';
+const BILLING_URL = 'https://www.kugelaudio.com/dashboard';
 
 export interface KugelAudioErrorOptions {
   statusCode?: number;

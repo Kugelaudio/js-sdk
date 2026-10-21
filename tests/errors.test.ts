@@ -185,7 +185,7 @@ describe('KugelAudio constructor', () => {
     // The core client never reads the env var, so the message must not point at it.
     expect(msg).not.toMatch(/KUGELAUDIO_API_KEY/);
     expect(msg).toMatch(/apiKey/);
-    expect(msg).toMatch(/https:\/\/app\.kugelaudio\.com\/settings\/api-keys/);
+    expect(msg).toMatch(/https:\/\/www\.kugelaudio\.com\/dashboard/);
   });
 
   it('invalid region throws ValidationError', () => {

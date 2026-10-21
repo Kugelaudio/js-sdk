@@ -2788,7 +2788,7 @@ export class KugelAudio {
     if (!options.apiKey) {
       throw new ValidationError(
         'KugelAudio API key is missing. Pass { apiKey: ... } to the client. ' +
-          'Get a key at https://app.kugelaudio.com/settings/api-keys.',
+          'Get a key at https://www.kugelaudio.com/dashboard.',
       );
     }
 
