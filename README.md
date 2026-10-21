@@ -159,6 +159,32 @@ automatic replay. Start a new stream and resend the text you still want spoken.
 One-shot `synthesize()` calls retain their configured retry budget, and exhausted
 retries report one terminal error without an unhandled promise rejection.
 
+### Speech to text
+
+`STT` transcribes the user with KugelAudio's streaming speech-to-text. The server
+detects the end of each turn, so let it drive turns with
+`turnHandling: { turnDetection: 'stt' }` (`turnDetection: 'stt'` on older
+`@livekit/agents` releases):
+
+```typescript
+import { voice } from '@livekit/agents';
+import { STT } from 'kugelaudio/livekit';
+
+const session = new voice.AgentSession({
+  stt: new STT({ language: 'en' }),
+  turnHandling: { turnDetection: 'stt' },
+  vad,   // e.g. Silero, for interruptions
+  // ...llm, tts
+});
+```
+
+Each turn emits interim transcripts while the user speaks, then the final
+transcript and end of speech. Options (`model`, `language` as one code, several
+or `'auto'`, `turnDetection`, `turnDetectionLevel`, `boostedPhrases`, `projectId`,
+`dictionaryIds`, `sampleRate`, default 16000) are sent only when set. Rate limits
+and connection failures are retried; a rejected key, missing credits or invalid
+options end the stream with an `error` event.
+
 > **Pipecat** is Python-only — use the Python SDK's `kugelaudio.pipecat`, or
 > LiveKit above for a server-side JS/TS agent.
 

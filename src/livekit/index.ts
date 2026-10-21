@@ -1,5 +1,5 @@
 /**
- * KugelAudio TTS plugin for the LiveKit Agents (Node.js) framework.
+ * KugelAudio TTS and STT plugins for the LiveKit Agents (Node.js) framework.
  *
  * Import from `kugelaudio/livekit`. Requires `@livekit/agents` and its peer
  * `@livekit/rtc-node` to be installed (they are optional peer dependencies of
@@ -8,9 +8,15 @@
  *
  * @example
  * ```ts
- * import { TTS } from 'kugelaudio/livekit';
+ * import { voice } from '@livekit/agents';
+ * import { STT, TTS } from 'kugelaudio/livekit';
  *
- * const tts = new TTS({ voiceId: 1071, model: 'kugel-3.5', language: 'en' });
+ * const session = new voice.AgentSession({
+ *   stt: new STT({ language: 'en' }),
+ *   turnHandling: { turnDetection: 'stt' }, // the server's end of turn drives turns
+ *   tts: new TTS({ voiceId: 1071, model: 'kugel-3.5', language: 'en' }),
+ *   // ...vad, llm
+ * });
  * ```
  *
  * @packageDocumentation
@@ -18,6 +24,9 @@
 
 export { TTS, ChunkedStream, SynthesizeStream } from './tts';
 export type { TTSOptions } from './tts';
+
+export { STT, SpeechStream, DEFAULT_STT_SAMPLE_RATE } from './stt';
+export type { STTOptions } from './stt';
 
 export {
   DEFAULT_CFG_SCALE,

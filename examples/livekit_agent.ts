@@ -1,14 +1,14 @@
 /**
- * Minimal LiveKit Agents (Node.js) worker using KugelAudio TTS.
+ * Minimal LiveKit Agents (Node.js) worker using KugelAudio STT and TTS.
  *
  * This mirrors `packages/public/python-sdk/examples/livekit_say_german.py`. It wires the
- * KugelAudio TTS plugin (`kugelaudio/livekit`) into a LiveKit `AgentSession`.
+ * KugelAudio STT and TTS plugins (`kugelaudio/livekit`) into a LiveKit `AgentSession`;
+ * the STT's server-side end of turn decides when the caller has finished.
  *
  * Prerequisites (from `packages/public/js-sdk`):
  *
  *   npm install @livekit/agents @livekit/rtc-node \
- *     @livekit/agents-plugin-silero @livekit/agents-plugin-deepgram \
- *     @livekit/agents-plugin-openai
+ *     @livekit/agents-plugin-silero @livekit/agents-plugin-openai
  *
  *   export KUGELAUDIO_API_KEY="..."
  *   export KUGELAUDIO_VOICE_ID="1071"
@@ -28,10 +28,9 @@ import {
   defineAgent,
   voice,
 } from '@livekit/agents';
-import * as deepgram from '@livekit/agents-plugin-deepgram';
 import * as openai from '@livekit/agents-plugin-openai';
 import * as silero from '@livekit/agents-plugin-silero';
-import { TTS as KugelAudioTTS } from 'kugelaudio/livekit';
+import { STT as KugelAudioSTT, TTS as KugelAudioTTS } from 'kugelaudio/livekit';
 
 const VOICE_ID = Number(process.env.KUGELAUDIO_VOICE_ID ?? '1071');
 
@@ -49,7 +48,10 @@ export default defineAgent({
     tts.prewarm();
 
     const session = new voice.AgentSession({
-      stt: new deepgram.STT(),
+      stt: new KugelAudioSTT({ language: 'en' }),
+      // KugelAudio's server decides when the caller has finished; the VAD
+      // below still lets the caller interrupt the agent.
+      turnHandling: { turnDetection: 'stt' },
       llm: new openai.LLM({ model: 'gpt-4o-mini' }),
       tts,
       vad: await silero.VAD.load(),
