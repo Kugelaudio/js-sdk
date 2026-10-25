@@ -16,9 +16,11 @@ before you change anything.
 Model ids, voices, limits, prices and APIs change. Before you write one down:
 
 - KugelAudio MCP connected: `search_docs`, then `read_docs_page` on a result. On the
-  `kugelaudio` server they include the pages of models released only to your organization.
-- No MCP: https://docs.kugelaudio.com/llms.txt lists every page; a page's URL plus `.md`
-  is its Markdown.
+  `kugelaudio` server they include the pages of models released only to your organization,
+  and the hosted-agents pages when your organization has Agents access; `kugelaudio-docs`
+  has the public pages only.
+- No MCP: https://docs.kugelaudio.com/llms.txt lists every public page; a page's URL plus
+  `.md` is its Markdown. The hosted-agents pages need the signed-in `kugelaudio` server.
 - The framework: `node_modules/curb/docs/agent-guide/` in the project, `README.md` first.
   It matches the Curb version the project runs.
 
@@ -68,7 +70,8 @@ project folder, which asks once to use them: `kugelaudio`, the user's account (t
 runs `/mcp`, chooses `kugelaudio`, signs in, picks the project and presses Allow), and
 `kugelaudio-docs`, the docs (no sign-in). A session started in another folder does not
 see them: ask the user to restart Claude Code in the project, or use the CLI.
-Sign-in trouble: https://docs.kugelaudio.com/hosted-agents/coding-agent
+Sign-in trouble: https://docs.kugelaudio.com/hosted-agents/coding-agent (sign in on the docs
+site first; the page shows only to organizations with Agents access)
 
 - MCP: `whoami` first. Then `create_agent` (once), `set_agent_secrets` for the provider
   keys (the platform provides `KUGELAUDIO_API_KEY`), `create_agent_upload`,
