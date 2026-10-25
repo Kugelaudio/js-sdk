@@ -12,8 +12,17 @@ const INSTALLER_REL = MANIFEST.bin['kugelaudio-skills'];
 // does not exist breaks `npx kugelaudio-skills` for every user, and the #1910
 // restructure rewrote this to `tools/scripts/` without moving the directory.
 const INSTALLER = resolve(PKG_ROOT, INSTALLER_REL);
-// Canonical copies live at the repo root; absent in a published tarball.
-const CANONICAL_DIR = resolve(PKG_ROOT, '..', '..', 'agent-skills');
+// The canonical copies live in the monorepo's packages/private, which the public
+// mirror of this package and its npm tarball do not have.
+const PRIVATE_DIR = resolve(PKG_ROOT, '..', '..', 'private');
+const CANONICAL_DIR = join(PRIVATE_DIR, 'tools', 'agent-skills');
+const SYNC = 'packages/private/tools/agent-skills/sync.sh';
+
+const skillDirs = (root: string) =>
+  readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(join(root, entry.name, 'SKILL.md')))
+    .map((entry) => entry.name)
+    .sort();
 
 const skillNames = () =>
   readdirSync(SKILLS_DIR, { withFileTypes: true })
@@ -34,15 +43,17 @@ describe('bundled agent skills', () => {
     }
   });
 
-  it('stays in sync with the canonical copy', () => {
-    if (!existsSync(CANONICAL_DIR)) return; // published tarball
+  it.skipIf(!existsSync(PRIVATE_DIR))('ships exactly the canonical skills, unchanged', () => {
+    expect(existsSync(CANONICAL_DIR), `no canonical skills at ${CANONICAL_DIR}`).toBe(true);
+    expect(
+      skillNames().sort(),
+      `the bundled skills differ from the canonical ones; run ${SYNC}`,
+    ).toEqual(skillDirs(CANONICAL_DIR));
     for (const name of skillNames()) {
-      const canonical = join(CANONICAL_DIR, name, 'SKILL.md');
-      expect(existsSync(canonical), `${name} has no canonical source`).toBe(true);
       expect(
         readFileSync(join(SKILLS_DIR, name, 'SKILL.md'), 'utf8'),
-        `${name} is out of sync — run agent-skills/sync.sh`,
-      ).toBe(readFileSync(canonical, 'utf8'));
+        `${name} is out of sync; run ${SYNC}`,
+      ).toBe(readFileSync(join(CANONICAL_DIR, name, 'SKILL.md'), 'utf8'));
     }
   });
 });

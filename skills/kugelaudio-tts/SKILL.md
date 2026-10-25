@@ -125,8 +125,8 @@ recovery): <https://docs.kugelaudio.com/guides/voice-prompting>.
 | Several independent speakers on one connection | a **multi-context session** |
 | LiveKit / Pipecat voice agent | the shipped integration, not a hand-rolled one |
 
-Use `kugel-3.5` for new integrations. Older IDs (`kugel-1-turbo`, `kugel-2.5`, …)
-still work but alias to the current model.
+Use `kugel-3.5` for new integrations; it is also the default when a request sends no
+`model_id`. Older IDs (`kugel-1-turbo`, `kugel-2.5`, …) still work but alias to the current model.
 
 ## Deployment: hosted vs on-premise
 
@@ -165,9 +165,7 @@ is arranged with the team (hello@kugelaudio.com).
 
 ## Reference
 
-- SDK guides: <https://docs.kugelaudio.com/sdks/python/quickstart>,
-  <https://docs.kugelaudio.com/sdks/javascript/quickstart>,
-  <https://docs.kugelaudio.com/sdks/java/quickstart>
+- SDK guides (Python, TypeScript, Java): <https://docs.kugelaudio.com/sdks/quickstart>
 - Streaming: <https://docs.kugelaudio.com/streaming/overview>
 - Turn lifecycle, barge-in, word timestamps:
   <https://docs.kugelaudio.com/streaming/turn-lifecycle>

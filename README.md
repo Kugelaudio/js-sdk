@@ -194,17 +194,21 @@ options end the stream with an `error` event.
 the key (`eu-ka_…`) or pass `region: 'eu'` —
 [details](https://docs.kugelaudio.com/guides/regions).
 
-## Agent skill
+## Agent skills
 
-If you build with a coding agent, install the bundled skill so it gets the TTFA
-rules, streaming semantics, and text-formatting constraints without you
-re-explaining them:
+If you build with a coding agent, install the bundled skills. `kugelaudio-tts`
+gives it the TTFA rules, streaming semantics, and text-formatting constraints
+without you re-explaining them; `kugelaudio-agents` builds a voice agent with the
+Curb framework, from an empty folder to a deployed hosted agent:
 
 ```bash
-npx kugelaudio-skills install     # → ./.claude/skills/kugelaudio-tts/
+npx kugelaudio-skills install     # → ./.claude/skills/kugelaudio-tts/ and kugelaudio-agents/
 ```
 
 `--global` installs to `~/.claude/skills/`, `--dest <dir>` picks another target.
+Before a voice agent project exists, `npx -p kugelaudio kugelaudio-skills install --global`
+makes the skills available in every folder.
+[Agent skills](https://docs.kugelaudio.com/guides/agent-skill) has the details.
 
 ## Audio helpers
 
