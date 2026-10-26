@@ -47,7 +47,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "postinstall": "node -e \"console.log('kugelaudio: agent skills kugelaudio-tts and kugelaudio-agents available — run npx kugelaudio-skills install to add them to .claude/skills/')\"",
+    "postinstall": "node -e \"console.log('kugelaudio: agent skill kugelaudio-tts available, run npx kugelaudio-skills install to add it to .claude/skills/')\"",
     "build": "tsup src/index.ts src/livekit/index.ts --format cjs,esm --dts --clean",
     "dev": "tsup src/index.ts src/livekit/index.ts --format cjs,esm --dts --watch",
     "lint": "eslint src/",
