@@ -53,7 +53,8 @@ Hand nothing over while `curb check` reports an error or a warning. `curb test` 
 until the project has a scenario: add one for every flow that matters (`testing.md` in
 the agent guide). `npm run dev` keeps running, so start it in the background and give
 the user the link it prints. Text needs only the language model's key; voice also needs
-`KUGELAUDIO_API_KEY`.
+`KUGELAUDIO_API_KEY`. Without the keys the preview still shows what the agent is built
+from (prompt, skills, tools) and names the key to set.
 
 ## 4. Keys
 
@@ -76,9 +77,17 @@ site first; the page shows only to organizations with Agents access)
 - MCP: `whoami` first. Then `create_agent` (once), `set_agent_secrets` for the provider
   keys (the platform provides `KUGELAUDIO_API_KEY`), `create_agent_upload`,
   `deploy_agent`, and `get_playground_link` to call it.
-- CLI: `npx curb login` (a person signs in in the browser), `npx curb secrets push`,
-  `npx curb deploy` (it prints the playground link). Every option:
-  `node_modules/curb/docs/deploy.md`.
+- CLI: `npx curb login --no-open`, `npx curb secrets push`, `npx curb deploy` (it prints
+  the playground link). Every option: `node_modules/curb/docs/deploy.md`. A dry run is
+  `npx curb deploy --no-activate`, or `npx curb build`, which uploads nothing.
+
+Not signed in is no reason to stop: run `npx curb login --no-open` in the background. It
+prints a sign-in link and waits up to five minutes; give the user that link to open in
+their browser on this machine, and continue once it prints `Signed in as`.
+
+Hosted agents are in a closed alpha, switched on per organization. When `curb login` or
+`curb deploy` prints `CURB_HOSTED_AGENTS_NOT_ENABLED`, the user asks hello@kugelaudio.com
+to switch them on; `curb dev` and `curb say` keep working meanwhile.
 
 When a build or a call fails, read the logs (`get_agent_logs`, or what `curb deploy`
 printed), fix the cause and deploy again. No hosted agent tools? `whoami` says why.
