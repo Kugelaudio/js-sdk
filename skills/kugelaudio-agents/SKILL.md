@@ -30,7 +30,7 @@ Node.js 22.12 or newer. Ask what the agent is for and which language its callers
 then scaffold it into a new folder with a lowercase name such as `pizza-agent` (it
 refuses a folder that is not empty):
 
-    npx --yes --allow-remote=all https://cdn.kugelaudio.com/curb/create-curb-app.tgz <folder> --yes
+    npm create kugelaudio <folder>
 
 The trailing `--yes` skips the setup wizard, which is meant for a person at a terminal:
 it takes the default providers and reads their keys from the environment. `--stt`,
