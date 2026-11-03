@@ -809,7 +809,7 @@ export type Region = 'eu' | 'us' | 'global';
 export interface KugelAudioOptions {
   /** Your KugelAudio API key or JWT token. Prefix with `eu-` to select the direct EU endpoint (prefix is stripped before auth). */
   apiKey: string;
-  /** Whether apiKey is a master key (for internal/server-side use). Master keys bypass billing. */
+  /** Whether apiKey is a master key (for internal/server-side use). Master keys bypass billing. Node.js only: the key is sent as an `Authorization` header, never in a URL. */
   isMasterKey?: boolean;
   /** Whether apiKey is a JWT token (for user authentication). Takes precedence over isMasterKey. */
   isToken?: boolean;

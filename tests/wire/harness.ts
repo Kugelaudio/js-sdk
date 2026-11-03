@@ -31,10 +31,17 @@ export interface DiagnosticsPost {
   body: string;
 }
 
+/** One WS upgrade request the fake API refused. */
+export interface UpgradeRequest {
+  url: string;
+  headers: IncomingHttpHeaders;
+}
+
 export interface WireServer {
   port: number;
   url: string;
   posts: DiagnosticsPost[];
+  upgrades: UpgradeRequest[];
   close(): Promise<void>;
 }
 
@@ -44,6 +51,7 @@ export interface WireServer {
  */
 export async function startWireServer(mode: DiagnosticsMode = 'accept'): Promise<WireServer> {
   const posts: DiagnosticsPost[] = [];
+  const upgrades: UpgradeRequest[] = [];
   const server: Server = createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/v1/sdk-diagnostics') {
       let body = '';
@@ -60,7 +68,8 @@ export async function startWireServer(mode: DiagnosticsMode = 'accept'): Promise
     res.writeHead(500, { 'content-type': 'application/json', 'x-request-id': API_REQUEST_ID });
     res.end(JSON.stringify({ error: 'boom' }));
   });
-  server.on('upgrade', (_req, socket) => {
+  server.on('upgrade', (req, socket) => {
+    upgrades.push({ url: req.url ?? '', headers: req.headers });
     socket.end(
       'HTTP/1.1 401 Unauthorized\r\n' +
         `x-request-id: ${UPGRADE_REQUEST_ID}\r\n` +
@@ -74,6 +83,7 @@ export async function startWireServer(mode: DiagnosticsMode = 'accept'): Promise
     port,
     url: `http://127.0.0.1:${port}`,
     posts,
+    upgrades,
     async close() {
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -94,7 +104,8 @@ export async function closedPort(): Promise<number> {
 /**
  * One SDK call in the child. `stream` pools its socket, `stream_unpooled`
  * does not; `readable` drains `toReadable()`; `session` and `multi` connect a
- * streaming / multi-context session.
+ * streaming / multi-context session; `asr` and `enhance` stream 0.1 s of PCM,
+ * `enhance_session` connects an enhancement session.
  */
 export type CallKind =
   | 'models'
@@ -103,12 +114,16 @@ export type CallKind =
   | 'stream_unpooled'
   | 'readable'
   | 'session'
-  | 'multi';
+  | 'multi'
+  | 'asr'
+  | 'enhance'
+  | 'enhance_session';
 
 export interface Scenario {
   entry?: 'mjs' | 'cjs';
   apiUrl: string;
   apiKey?: string;
+  isMasterKey?: boolean;
   telemetry?: boolean;
   calls: { kind: CallKind; text?: string }[];
   /** Close the client at the end (default); `false` lets the script just end. */

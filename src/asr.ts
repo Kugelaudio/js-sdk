@@ -28,6 +28,7 @@ import type {
 } from './types';
 import { arrayBufferToBase64 } from './utils';
 import { getWebSocket, loadWebSocket } from './websocket';
+import { newWebSocket, type SocketTarget } from './ws-auth';
 
 const TRANSCRIBE_PATH = '/v1/audio/transcriptions';
 const STREAM_PATH = '/v1/audio/transcriptions/stream';
@@ -139,12 +140,12 @@ function* split(chunk: unknown, maxBytes: number): Generator<Uint8Array> {
 
 // ----------------------------------------------------------- WebSocket
 
-/** Open `url`; a refused upgrade or early close rejects with its typed error. */
-async function connect(url: string, timeoutMs: number, events: EventQueue): Promise<WebSocket> {
+/** Open `target`; a refused upgrade or early close rejects with its typed error. */
+async function connect(target: SocketTarget, timeoutMs: number, events: EventQueue): Promise<WebSocket> {
   const WS = getWebSocket() ?? (await loadWebSocket());
   let ws: WebSocket;
   try {
-    ws = new WS(url);
+    ws = newWebSocket(WS, target.url, target.headers);
   } catch {
     // Its message holds the URL, whose query carries the API key.
     throw new ValidationError('The KugelAudio API URL does not form a valid WebSocket URL.');
@@ -191,13 +192,13 @@ async function sendAudio(
 }
 
 async function* runStream(
-  url: string,
+  target: SocketTarget,
   config: StreamingTranscriptionConfig,
   audio: Iterable<unknown> | AsyncIterable<unknown>,
   timeoutMs: number,
 ): AsyncGenerator<StreamingTranscriptionResult, void, undefined> {
   const events = new EventQueue();
-  const ws = await connect(url, timeoutMs, events);
+  const ws = await connect(target, timeoutMs, events);
   let stopped = false;
   try {
     ws.send(JSON.stringify(config));
@@ -279,7 +280,6 @@ export class ASRResource {
     options: TranscriptionStreamOptions = {},
   ): AsyncGenerator<StreamingTranscriptionResult, void, undefined> {
     const config = streamConfig(audio, options);
-    const url = this.client.apiWsUrl(STREAM_PATH, { api_key: this.client.apiKey });
-    return runStream(url, config, audio, this.client.timeout);
+    return runStream(this.client.apiSocket(STREAM_PATH), config, audio, this.client.timeout);
   }
 }

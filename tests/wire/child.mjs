@@ -6,7 +6,7 @@
  * the parent.
  *
  * Usage: node [--import ./preload.mjs] child.mjs '<scenario json>'
- *   { entry: 'mjs'|'cjs', apiUrl, apiKey, telemetry?, calls: [{kind, text?}],
+ *   { entry: 'mjs'|'cjs', apiUrl, apiKey, isMasterKey?, telemetry?, calls: [{kind, text?}],
  *     (kinds: `CallKind` in harness.ts)
  *     close?: boolean (default true), crash?: boolean }
  *
@@ -24,9 +24,12 @@ const sdk =
 const client = new sdk.KugelAudio({
   apiKey: scenario.apiKey,
   apiUrl: scenario.apiUrl,
+  ...(scenario.isMasterKey !== undefined && { isMasterKey: scenario.isMasterKey }),
   ...(scenario.telemetry !== undefined && { telemetry: scenario.telemetry }),
 });
 
+/** 0.1 s of 16 kHz PCM16 for the ASR and enhance sockets. */
+const PCM = new Uint8Array(3200);
 const results = [];
 for (const call of scenario.calls) {
   try {
@@ -44,6 +47,12 @@ for (const call of scenario.calls) {
       await client.tts.streamingSession({ voiceId: 1, language: 'en' }, {}).connect();
     } else if (call.kind === 'multi') {
       await client.tts.createMultiContextSession({ defaultVoiceId: 1 }).connect({});
+    } else if (call.kind === 'asr') {
+      for await (const r of client.asr.stream([PCM], { sampleRate: 16000 })) void r;
+    } else if (call.kind === 'enhance') {
+      for await (const c of client.enhance.stream([PCM], { model: 'clarity-1', sampleRate: 16000 })) void c;
+    } else if (call.kind === 'enhance_session') {
+      await client.enhance.session().connect();
     } else throw new Error(`unknown call ${call.kind}`);
     results.push({ ok: true });
   } catch (error) {

@@ -8,7 +8,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { KugelAudio } from './client';
-import { ConnectionError, RateLimitError, ServerRestartingError } from './errors';
+import { ConnectionError, KugelAudioError, RateLimitError, ServerRestartingError } from './errors';
+import * as runtime from './node-runtime';
 import { parseSessionUsage } from './types';
 
 // ---------------------------------------------------------------------------
@@ -20,6 +21,7 @@ type WsCloseListener = (event: { code: number; reason?: string }) => void;
 
 interface MockWs {
   url: string;
+  options?: { headers?: Record<string, string> };
   readyState: number;
   onopen: (() => void) | null;
   onmessage: WsListener | null;
@@ -45,8 +47,11 @@ vi.mock('./websocket', () => ({
       close = vi.fn();
       ping = vi.fn();
 
-      constructor(url: string) {
+      options?: { headers?: Record<string, string> };
+
+      constructor(url: string, options?: { headers?: Record<string, string> }) {
         this.url = url;
+        this.options = options;
         mockWs = this as unknown as MockWs;
         // Simulate async open
         setTimeout(() => {
@@ -296,6 +301,62 @@ describe('KugelAudio multi-region', () => {
 // ---------------------------------------------------------------------------
 // Keepalive ping tests
 // ---------------------------------------------------------------------------
+
+describe('master key on the TTS sockets', () => {
+  const masterKey = (): KugelAudio => new KugelAudio({ apiKey: 'mk-secret', isMasterKey: true, orgId: 7 });
+
+  function expectHeaderOnly(path: string): void {
+    expect(mockWs.url).toContain(path);
+    expect(mockWs.url).not.toContain('mk-secret');
+    expect(mockWs.options?.headers).toEqual({ Authorization: 'Bearer mk-secret' });
+  }
+
+  it('/ws/tts carries it in the Authorization header, not the URL', async () => {
+    masterKey().tts.toReadable({ text: 'Hi' });
+    await new Promise<void>((r) => setTimeout(r, 10));
+    expectHeaderOnly('/ws/tts?org_id=7&sdk=');
+  });
+
+  it('/ws/tts/stream carries it in the Authorization header, not the URL', async () => {
+    await masterKey().tts.streamingSession({ voiceId: 1 }, {}).connect();
+    expectHeaderOnly('/ws/tts/stream?sdk=');
+  });
+
+  it('/ws/tts/multi carries it in the Authorization header, not the URL', async () => {
+    await masterKey().tts.createMultiContextSession({ defaultVoiceId: 1 }).connect({});
+    expectHeaderOnly('/ws/tts/multi?sdk=');
+  });
+
+  it('an API key still rides the query with no headers', async () => {
+    new KugelAudio({ apiKey: 'plain-key' }).tts.toReadable({ text: 'Hi' });
+    await new Promise<void>((r) => setTimeout(r, 10));
+    expect(mockWs.url).toContain('/ws/tts?api_key=plain-key');
+    expect(mockWs.options).toBeUndefined();
+  });
+});
+
+describe('master key outside Node.js', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it.each(['session', 'multi'] as const)(
+    '%s connect() rejects with the typed error, never throws, and settles its operation',
+    async (kind) => {
+      vi.spyOn(runtime, 'isNodeJs').mockReturnValue(false);
+      const client = new KugelAudio({ apiKey: 'mk-secret', isMasterKey: true });
+      const start = vi.spyOn(client.diagnostics, 'startOperation');
+      let pending: Promise<void> | undefined;
+      expect(() => {
+        pending =
+          kind === 'session'
+            ? client.tts.streamingSession({ voiceId: 1 }, {}).connect()
+            : client.tts.createMultiContextSession({ defaultVoiceId: 1 }).connect({});
+      }).not.toThrow();
+      await expect(pending).rejects.toBeInstanceOf(KugelAudioError);
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(start.mock.results[0].value.settled).toBe(true);
+    },
+  );
+});
 
 describe('KugelAudio keepalive ping', () => {
   beforeEach(() => {

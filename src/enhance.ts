@@ -27,6 +27,7 @@ import { captureHandshakeRejection } from './handshake';
 import { EventQueue, openSocket, parseText, sleep } from './socket-stream';
 import { arrayBufferToBase64, createWavFile } from './utils';
 import { getWebSocket, loadWebSocket } from './websocket';
+import { newWebSocket, type SocketTarget } from './ws-auth';
 
 export const TASK_NOISE_REMOVAL = 'noise_removal';
 export const TASK_TARGET_SPEAKER_EXTRACTION = 'target_speaker_extraction';
@@ -260,11 +261,11 @@ const SESSION_LIFETIME_MS = 3_540_000;
 // for 30 s, before it closes it: that socket is stale, not the new config wrong.
 const IDLE_FRAME_CODE = 408;
 
-async function connectSocket(url: string, timeoutMs: number): Promise<Socket> {
+async function connectSocket(target: SocketTarget, timeoutMs: number): Promise<Socket> {
   const WS = getWebSocket() ?? (await loadWebSocket());
   let ws: WebSocket;
   try {
-    ws = new WS(url);
+    ws = newWebSocket(WS, target.url, target.headers);
   } catch {
     // Its message holds the URL, whose query carries the API key.
     throw new ValidationError('The KugelAudio API URL does not form a valid WebSocket URL.');
@@ -372,14 +373,14 @@ async function withSpeaker(
 }
 
 async function* runStream(
-  url: string,
+  target: SocketTarget,
   config: Record<string, unknown>,
   audio: Iterable<unknown> | AsyncIterable<unknown>,
   speaker: AudioInput | undefined,
   timeoutMs: number,
 ): AsyncGenerator<Uint8Array, void, undefined> {
   const full = await withSpeaker(config, speaker);
-  const socket = await connectSocket(url, timeoutMs);
+  const socket = await connectSocket(target, timeoutMs);
   try {
     await begin(socket, full, timeoutMs, false);
     yield* exchange(socket, full, audio);
@@ -491,7 +492,7 @@ export class EnhanceSession {
     try {
       let [socket, reused] = await this.acquireSocket();
       if (socket === null) {
-        yield* runStream(this.url(false), full, audio, undefined, timeoutMs);
+        yield* runStream(this.target(false), full, audio, undefined, timeoutMs);
         return;
       }
       let ready: Record<string, unknown>;
@@ -537,7 +538,7 @@ export class EnhanceSession {
     if (this.socket !== null && this.reusable(this.socket)) return [this.socket, true];
     this.drop();
     let socket: Socket;
-    const pending = connectSocket(this.url(true), this.client.timeout);
+    const pending = connectSocket(this.target(true), this.client.timeout);
     this.connecting = pending.catch(() => undefined);
     try {
       socket = await pending;
@@ -578,10 +579,8 @@ export class EnhanceSession {
     if (socket !== null) closeSocket(socket);
   }
 
-  private url(session: boolean): string {
-    const query: Record<string, string> = { api_key: this.client.apiKey };
-    if (session) query.session = '1';
-    return this.client.apiWsUrl(ENHANCE_STREAM_PATH, query);
+  private target(session: boolean): SocketTarget {
+    return this.client.apiSocket(ENHANCE_STREAM_PATH, session ? { session: '1' } : {});
   }
 }
 
@@ -701,8 +700,8 @@ export class EnhanceResource {
     options: EnhanceStreamOptions,
   ): AsyncGenerator<Uint8Array, void, undefined> {
     const config = streamConfig(audio, options);
-    const url = this.client.apiWsUrl(ENHANCE_STREAM_PATH, { api_key: this.client.apiKey });
-    return runStream(url, config, audio, options.speaker, this.client.timeout);
+    const target = this.client.apiSocket(ENHANCE_STREAM_PATH);
+    return runStream(target, config, audio, options.speaker, this.client.timeout);
   }
 
   /**

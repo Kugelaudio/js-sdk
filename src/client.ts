@@ -43,6 +43,14 @@ import { authHeaders, base64ToArrayBuffer, clampCfgScale } from './utils';
 import { nodeReadable } from './node-runtime';
 import { getWebSocket, loadWebSocket } from './websocket';
 import {
+    masterKeyHeaders,
+    newWebSocket,
+    socketCredential,
+    withCredentialQuery,
+    type SocketCredential,
+    type SocketTarget,
+} from './ws-auth';
+import {
     captureHandshakeRejection,
     handshakeDeadline,
     handshakeRejectionOf,
@@ -102,8 +110,8 @@ function appendSdkQuery(url: string): string {
  * lazily, to avoid top-level side-effects that break server-side bundlers
  * (Turbopack/Webpack).
  */
-function createWs(WS: typeof WebSocket, url: string): WebSocket {
-  const ws = new WS(url);
+function createWs(WS: typeof WebSocket, url: string, credential: SocketCredential): WebSocket {
+  const ws = newWebSocket(WS, url, credential.headers);
   // Keeps a refused upgrade's `x-request-id` (contract "Request-ID correlation").
   captureHandshakeRejection(ws);
   return ws;
@@ -764,23 +772,14 @@ class TTSResource {
   /**
    * Build the WebSocket URL with appropriate auth param.
    */
-  private buildWsUrl(): string {
+  private buildWsUrl(credential: SocketCredential): string {
     const wsUrl = this.client.ttsUrl
       .replace('https://', 'wss://')
       .replace('http://', 'ws://');
-    // Use token param for JWT tokens, master_key for master keys (bypasses billing), api_key for regular keys
-    let authParam: string;
-    if (this.client.isToken) {
-      authParam = 'token';
-    } else if (this.client.isMasterKey) {
-      authParam = 'master_key';
-    } else {
-      authParam = 'api_key';
-    }
-    let url = `${wsUrl}/ws/tts?${authParam}=${this.client.apiKey}`;
+    let url = withCredentialQuery(`${wsUrl}/ws/tts`, credential);
     // Append org_id for token auth so usage is recorded against the org
     if (this.client.orgId !== undefined) {
-      url += `&org_id=${this.client.orgId}`;
+      url += `${url.includes('?') ? '&' : '?'}org_id=${this.client.orgId}`;
     }
     return appendSdkQuery(url);
   }
@@ -792,7 +791,8 @@ class TTSResource {
   private async getConnection(op?: Operation): Promise<WebSocket> {
     // First, so everything below stays synchronous up to `this.connecting`.
     const WS = getWebSocket() ?? (await loadWebSocket());
-    const url = this.buildWsUrl();
+    const credential = socketCredential(this.client);
+    const url = this.buildWsUrl(credential);
 
     // Return existing connection if valid
     if (
@@ -815,7 +815,7 @@ class TTSResource {
       this.wsConnection = null;
     }
 
-    const ws = createWs(WS, url);
+    const ws = createWs(WS, url, credential);
     this.wsConnection = ws;
     this.wsUrl = url;
     let opened = false;
@@ -1081,8 +1081,9 @@ class TTSResource {
     if (!retry) warnIfNoLanguage(options.language, options.normalize);
     const WS = getWebSocket() ?? (await loadWebSocket());
     return new Promise((resolve, reject) => {
-      const url = this.buildWsUrl();
-      const ws = createWs(WS, url);
+      const credential = socketCredential(this.client);
+      const url = this.buildWsUrl(credential);
+      const ws = createWs(WS, url, credential);
       let opened = false;
       const deadline = handshakeDeadline(ws, this.client.timeout, reject);
       let audioSeen = false;
@@ -1508,15 +1509,6 @@ class MultiContextSession {
       .replace('https://', 'wss://')
       .replace('http://', 'ws://');
 
-    let authParam: string;
-    if (this.client.isToken) {
-      authParam = 'token';
-    } else if (this.client.isMasterKey) {
-      authParam = 'master_key';
-    } else {
-      authParam = 'api_key';
-    }
-
     const preOpenOps = (): Operation[] => {
       if (connectOp) return [connectOp];
       const ops: Operation[] = [];
@@ -1524,8 +1516,20 @@ class MultiContextSession {
       return ops;
     };
 
-    const url = appendSdkQuery(`${wsUrl}/ws/tts/multi?${authParam}=${this.client.apiKey}`);
-    this.ws = createWs(WS, url);
+    let credential: SocketCredential;
+    try {
+      credential = socketCredential(this.client);
+    } catch (error) {
+      // A pre-open error rejects (it must not throw at the call) and settles its ops.
+      for (const op of preOpenOps()) {
+        op.markStage('connecting');
+        op.fail(error);
+      }
+      return Promise.reject(error);
+    }
+
+    const url = appendSdkQuery(withCredentialQuery(`${wsUrl}/ws/tts/multi`, credential));
+    this.ws = createWs(WS, url, credential);
     const ws = this.ws;
 
     ws.onmessage = (event: { data: unknown }) => {
@@ -2152,19 +2156,22 @@ class StreamingSession {
       .replace('https://', 'wss://')
       .replace('http://', 'ws://');
 
-    let authParam: string;
-    if (this.client.isToken) {
-      authParam = 'token';
-    } else if (this.client.isMasterKey) {
-      authParam = 'master_key';
-    } else {
-      authParam = 'api_key';
-    }
-
     const preOpenOp = (): Operation | null => connectOp ?? this.turnOp;
 
-    const url = appendSdkQuery(`${wsUrl}/ws/tts/stream?${authParam}=${this.client.apiKey}`);
-    this.ws = createWs(WS, url);
+    let credential: SocketCredential;
+    try {
+      credential = socketCredential(this.client);
+    } catch (error) {
+      // A pre-open error rejects (it must not throw at the call) and settles its op.
+      const op = preOpenOp();
+      op?.markStage('connecting');
+      op?.fail(error);
+      if (!connectOp) this.turnOp = null;
+      return Promise.reject(error);
+    }
+
+    const url = appendSdkQuery(withCredentialQuery(`${wsUrl}/ws/tts/stream`, credential));
+    this.ws = createWs(WS, url, credential);
     const ws = this.ws;
 
     ws.onmessage = (event: { data: unknown }) => {
@@ -2888,12 +2895,16 @@ export class KugelAudio {
   }
 
   /**
-   * WebSocket URL for `path` on the API host, with `query` and the SDK query.
+   * Socket for `path` on the API host: `query`, the credential (`api_key=`, or
+   * the master key as an upgrade header) and the SDK query.
    * @internal
    */
-  apiWsUrl(path: string, query: Record<string, string>): string {
+  apiSocket(path: string, query: Record<string, string> = {}): SocketTarget {
     const base = this._apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
-    return appendSdkQuery(`${base}${path}?${new URLSearchParams(query)}`);
+    const headers = masterKeyHeaders(this);
+    const params = headers ? query : { api_key: this.apiKey, ...query };
+    const search = new URLSearchParams(params).toString();
+    return { url: appendSdkQuery(search ? `${base}${path}?${search}` : `${base}${path}`), headers };
   }
 
   /** Get keepalive ping interval in milliseconds, or null if disabled. */
