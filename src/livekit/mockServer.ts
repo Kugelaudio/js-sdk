@@ -52,6 +52,12 @@ export class MockMultiServer {
   /** When true, never respond to anything (for idle-timeout tests). */
   silent = false;
   /**
+   * Milliseconds the server waits after a flush before it sends that flush's
+   * audio. A connection's messages are answered in order, so a later
+   * `close_context` is answered only after the delayed audio.
+   */
+  flushDelayMs = 0;
+  /**
    * When true, accept the TCP connection but never complete the WebSocket
    * handshake — the "dead API" a caller's own `timeoutMs` must bound.
    */
@@ -97,7 +103,11 @@ export class MockMultiServer {
     });
     this.wss.on('connection', (ws) => {
       this.connectionCount += 1;
-      ws.on('message', (raw) => this.onMessage(ws, JSON.parse(raw.toString())));
+      let pending = Promise.resolve();
+      ws.on('message', (raw) => {
+        const msg = JSON.parse(raw.toString()) as Record<string, unknown>;
+        pending = pending.then(() => this.onMessage(ws, msg));
+      });
     });
   }
 
@@ -119,7 +129,7 @@ export class MockMultiServer {
     await new Promise<void>((resolve) => this.server.close(() => resolve()));
   }
 
-  private onMessage(ws: ServerWebSocket, msg: Record<string, unknown>): void {
+  private async onMessage(ws: ServerWebSocket, msg: Record<string, unknown>): Promise<void> {
     this.messages.push(msg);
     if (this.silent) return;
 
@@ -157,6 +167,9 @@ export class MockMultiServer {
         return;
       }
       if (ctx.text.length > 0) {
+        if (this.flushDelayMs > 0) {
+          await new Promise((resolve) => setTimeout(resolve, this.flushDelayMs));
+        }
         for (let i = 0; i < this.audioFramesPerFlush; i++) {
           const pcm = Buffer.alloc(FRAME_BYTES, i + 1);
           ws.send(JSON.stringify({ audio: pcm.toString('base64'), context_id: contextId }));

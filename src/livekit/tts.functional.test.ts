@@ -10,10 +10,12 @@
 
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
-import { initializeLogger, type APIError } from '@livekit/agents';
+import { initializeLogger, type APIError, type metrics } from '@livekit/agents';
 
 import { FRAME_BYTES, MockMultiServer } from './mockServer';
 import { SynthesizeStream, TTS } from './tts';
+
+type TTSMetrics = metrics.TTSMetrics;
 
 let server: MockMultiServer;
 let baseURL: string;
@@ -99,6 +101,25 @@ describe('LiveKit plugin against mock /ws/tts/multi server', () => {
       .filter((m) => typeof m.text === 'string')
       .map((m) => m.text);
     expect(textMessages.join('')).toBe('Guten Tag');
+  });
+
+  it('streaming metrics count TTFB from the first text sent to the first audio frame', async () => {
+    const instance = await setup();
+    server.flushDelayMs = 200;
+    const metrics: TTSMetrics[] = [];
+    instance.on('metrics_collected', (m: TTSMetrics) => metrics.push(m));
+
+    const stream = instance.stream();
+    stream.pushText('Guten Tag');
+    stream.endInput();
+    for await (const event of stream) {
+      if (event === SynthesizeStream.END_OF_STREAM) break;
+    }
+
+    const streamed = metrics.filter((m) => m.streamed);
+    expect(streamed).toHaveLength(1);
+    expect(streamed[0]!.ttfbMs).toBeGreaterThanOrEqual(190);
+    expect(streamed[0]!.ttfbMs).toBeLessThan(400);
   });
 
   it('delivers the sub-frame sentence tail on chunk_complete without waiting for more audio', async () => {

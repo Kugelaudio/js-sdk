@@ -599,6 +599,12 @@ export class SynthesizeStream extends tts.SynthesizeStream {
           continue;
         }
         if (!data) continue;
+        // LiveKit counts streaming TTFB from this mark to the first audio frame
+        // and emits no streaming metrics without it. Only the first call per
+        // segment takes effect; LiveKit resets it after emitting the metrics.
+        // `markStarted` exists from @livekit/agents 1.6.0 (absent in 1.5.0);
+        // the peer range still admits older versions, which lack it.
+        if (typeof this.markStarted === 'function') this.markStarted();
         connection.sendText(contextId, data, false);
       }
       // Input channel closed. On a normal end-of-input, flush and close the
