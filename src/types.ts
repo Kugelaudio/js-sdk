@@ -368,12 +368,20 @@ export interface WordTimestamp {
   startMs: number;
   /** End time in milliseconds (relative to chunk/audio start) */
   endMs: number;
-  /** Start character offset in the original text */
+  /** Start offset in {@link text} (the spoken text, after normalization). All offsets count Unicode code points, not UTF-16 units: slice with `Array.from(text)`. */
   charStart: number;
-  /** End character offset in the original text */
+  /** End character offset (exclusive) in {@link text} */
   charEnd: number;
   /** Alignment confidence score (0.0 - 1.0) */
   score: number;
+  /** Start offset in {@link originalText} (your text) of the words this word speaks. Undefined when the server does not send it. */
+  originalCharStart?: number;
+  /** End offset (exclusive) in {@link originalText}. Undefined when the server does not send it. */
+  originalCharEnd?: number;
+  /** The text the chunk spoke, after normalization (the frame's `text`). */
+  text?: string;
+  /** The part of your text the chunk spoke, before normalization (the frame's `original_text`). */
+  originalText?: string;
 }
 
 /**

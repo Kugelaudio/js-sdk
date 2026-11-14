@@ -2,6 +2,34 @@
  * Utility functions for KugelAudio SDK.
  */
 
+import type { WordTimestamp } from './types';
+
+/**
+ * Parse a `word_timestamps` frame. Each word also carries the frame's `text`
+ * and `original_text`; the original offsets and texts are undefined when the
+ * server does not send them.
+ */
+export function parseWordTimestamps(frame: {
+  word_timestamps: Record<string, unknown>[];
+  text?: unknown;
+  original_text?: unknown;
+}): WordTimestamp[] {
+  const text = typeof frame.text === 'string' ? frame.text : undefined;
+  const originalText = typeof frame.original_text === 'string' ? frame.original_text : undefined;
+  return frame.word_timestamps.map((w) => ({
+    word: w.word as string,
+    startMs: w.start_ms as number,
+    endMs: w.end_ms as number,
+    charStart: w.char_start as number,
+    charEnd: w.char_end as number,
+    score: (w.score as number) ?? 1.0,
+    originalCharStart: w.original_char_start as number | undefined,
+    originalCharEnd: w.original_char_end as number | undefined,
+    text,
+    originalText,
+  }));
+}
+
 /**
  * Accepted classifier-free guidance band. Values outside [MIN, MAX] are
  * clamped into the band (both client-side and by the server).

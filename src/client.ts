@@ -39,7 +39,7 @@ import type {
     WordTimestamp
 } from './types';
 import { parseSessionUsage } from './types';
-import { authHeaders, base64ToArrayBuffer, clampCfgScale } from './utils';
+import { authHeaders, base64ToArrayBuffer, clampCfgScale, parseWordTimestamps } from './utils';
 import { nodeReadable } from './node-runtime';
 import { getWebSocket, loadWebSocket } from './websocket';
 import {
@@ -935,16 +935,7 @@ class TTSResource {
         }
 
         if (data.word_timestamps) {
-          const timestamps: WordTimestamp[] = data.word_timestamps.map(
-            (w: Record<string, unknown>) => ({
-              word: w.word as string,
-              startMs: w.start_ms as number,
-              endMs: w.end_ms as number,
-              charStart: w.char_start as number,
-              charEnd: w.char_end as number,
-              score: (w.score as number) ?? 1.0,
-            })
-          );
+          const timestamps: WordTimestamp[] = parseWordTimestamps(data);
           pending.callbacks.onWordTimestamps?.(timestamps);
         }
       } catch (e) {
@@ -1170,16 +1161,7 @@ class TTSResource {
           }
 
           if (data.word_timestamps) {
-            const timestamps: WordTimestamp[] = data.word_timestamps.map(
-              (w: Record<string, unknown>) => ({
-                word: w.word as string,
-                startMs: w.start_ms as number,
-                endMs: w.end_ms as number,
-                charStart: w.char_start as number,
-                charEnd: w.char_end as number,
-                score: (w.score as number) ?? 1.0,
-              })
-            );
+            const timestamps: WordTimestamp[] = parseWordTimestamps(data);
             callbacks.onWordTimestamps?.(timestamps);
           }
         } catch (e) {
@@ -2210,14 +2192,7 @@ class StreamingSession {
         }
 
         if (data.word_timestamps) {
-          const timestamps = data.word_timestamps.map((w: Record<string, unknown>) => ({
-            word: w.word as string,
-            startMs: w.start_ms as number,
-            endMs: w.end_ms as number,
-            charStart: w.char_start as number,
-            charEnd: w.char_end as number,
-            score: (w.score as number) ?? 1.0,
-          }));
+          const timestamps = parseWordTimestamps(data);
           this.callbacks.onWordTimestamps?.(timestamps);
         }
 
