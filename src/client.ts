@@ -1510,7 +1510,11 @@ class MultiContextSession {
       return Promise.reject(error);
     }
 
-    const url = appendSdkQuery(withCredentialQuery(`${wsUrl}/ws/tts/multi`, credential));
+    let url = withCredentialQuery(`${wsUrl}/ws/tts/multi`, credential);
+    if (this.client.isToken && this.client.orgId !== undefined) {
+      url += `${url.includes('?') ? '&' : '?'}org_id=${this.client.orgId}`;
+    }
+    url = appendSdkQuery(url);
     this.ws = createWs(WS, url, credential);
     const ws = this.ws;
 
@@ -2152,7 +2156,11 @@ class StreamingSession {
       return Promise.reject(error);
     }
 
-    const url = appendSdkQuery(withCredentialQuery(`${wsUrl}/ws/tts/stream`, credential));
+    let url = withCredentialQuery(`${wsUrl}/ws/tts/stream`, credential);
+    if (this.client.isToken && this.client.orgId !== undefined) {
+      url += `${url.includes('?') ? '&' : '?'}org_id=${this.client.orgId}`;
+    }
+    url = appendSdkQuery(url);
     this.ws = createWs(WS, url, credential);
     const ws = this.ws;
 
@@ -2870,14 +2878,19 @@ export class KugelAudio {
   }
 
   /**
-   * Socket for `path` on the API host: `query`, the credential (`api_key=`, or
-   * the master key as an upgrade header) and the SDK query.
+   * Socket for `path` on the API host: `query`, the credential (`api_key=`,
+   * `token=` + `org_id=`, or the master key as an upgrade header) and the SDK query.
    * @internal
    */
   apiSocket(path: string, query: Record<string, string> = {}): SocketTarget {
     const base = this._apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
     const headers = masterKeyHeaders(this);
-    const params = headers ? query : { api_key: this.apiKey, ...query };
+    const params: Record<string, string> = headers
+      ? { ...query }
+      : { [this.isToken ? 'token' : 'api_key']: this.apiKey, ...query };
+    if (this.isToken && this._orgId !== undefined) {
+      params.org_id = String(this._orgId);
+    }
     const search = new URLSearchParams(params).toString();
     return { url: appendSdkQuery(search ? `${base}${path}?${search}` : `${base}${path}`), headers };
   }

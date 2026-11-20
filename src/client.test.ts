@@ -335,6 +335,44 @@ describe('master key on the TTS sockets', () => {
   });
 });
 
+describe('token auth on WebSockets', () => {
+  const tokenClient = (): KugelAudio =>
+    new KugelAudio({ apiKey: 'jwt.header.sig', isToken: true, orgId: 42 });
+
+  it('apiSocket() sends token and org_id for ASR and enhance WebSockets, never api_key', () => {
+    const asr = tokenClient().apiSocket('/v1/audio/transcriptions/stream');
+    expect(asr.headers).toBeUndefined();
+    const asrUrl = new URL(asr.url);
+    expect(asrUrl.searchParams.get('token')).toBe('jwt.header.sig');
+    expect(asrUrl.searchParams.get('api_key')).toBeNull();
+    expect(asrUrl.searchParams.get('org_id')).toBe('42');
+
+    const enhance = tokenClient().apiSocket('/v1/audio/enhance/stream', { session: '1' });
+    expect(enhance.headers).toBeUndefined();
+    const enhanceUrl = new URL(enhance.url);
+    expect(enhanceUrl.searchParams.get('token')).toBe('jwt.header.sig');
+    expect(enhanceUrl.searchParams.get('api_key')).toBeNull();
+    expect(enhanceUrl.searchParams.get('org_id')).toBe('42');
+    expect(enhanceUrl.searchParams.get('session')).toBe('1');
+  });
+
+  it('/ws/tts/stream carries token and org_id for token auth', async () => {
+    await tokenClient().tts.streamingSession({ voiceId: 1 }, {}).connect();
+    const url = new URL(mockWs.url);
+    expect(url.pathname).toBe('/ws/tts/stream');
+    expect(url.searchParams.get('token')).toBe('jwt.header.sig');
+    expect(url.searchParams.get('org_id')).toBe('42');
+  });
+
+  it('/ws/tts/multi carries token and org_id for token auth', async () => {
+    await tokenClient().tts.createMultiContextSession({ defaultVoiceId: 1 }).connect({});
+    const url = new URL(mockWs.url);
+    expect(url.pathname).toBe('/ws/tts/multi');
+    expect(url.searchParams.get('token')).toBe('jwt.header.sig');
+    expect(url.searchParams.get('org_id')).toBe('42');
+  });
+});
+
 describe('master key outside Node.js', () => {
   afterEach(() => vi.restoreAllMocks());
 
