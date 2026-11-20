@@ -152,11 +152,14 @@ export class Connection {
       this.#diagnostics?.startOperation('multi_context', 'websocket') ?? null;
     try {
       signal?.throwIfAborted();
-      const url = buildMultiWsUrl(this.#opts.baseURL, this.#opts.apiKey);
+      const url = buildMultiWsUrl(this.#opts.baseURL);
       await new Promise<void>((resolve, reject) => {
         let settled = false;
         const started = performance.now();
-        const ws = new WebSocket(url, { handshakeTimeout: timeoutMs });
+        const ws = new WebSocket(url, {
+          handshakeTimeout: timeoutMs,
+          headers: { Authorization: `Bearer ${this.#opts.apiKey}` },
+        });
         this.#ws = ws;
         const cleanup = () => {
           clearTimeout(timer);

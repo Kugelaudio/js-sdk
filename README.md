@@ -6,6 +6,12 @@ voice cloning, dictionaries, and word timestamps.
 
 📖 **[Full documentation →](https://docs.kugelaudio.com/sdks/javascript/quickstart)**
 
+
+Node.js uses authentication headers for REST requests and WebSocket upgrades.
+For browser WebSockets, use a short-lived user JWT with
+`new KugelAudio({ apiKey: jwt, isToken: true, orgId })`. Browser WebSocket
+authentication with an API key is deprecated and emits a warning once.
+
 ## Installation
 
 ```bash

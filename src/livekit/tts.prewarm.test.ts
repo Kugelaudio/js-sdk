@@ -50,6 +50,22 @@ async function setupLive(): Promise<TTS> {
   return instance;
 }
 
+it('sends the LiveKit API key in the upgrade header', async () => {
+  const instance = await setupLive();
+  const upgrades: Array<{ url?: string; authorization?: string }> = [];
+  server.server.on('upgrade', (request) => {
+    upgrades.push({ url: request.url, authorization: request.headers.authorization });
+  });
+
+  await instance.currentConnection(5_000);
+
+  expect(upgrades).toEqual([{
+    url: expect.stringMatching(/^\/ws\/tts\/multi\?sdk=/),
+    authorization: 'Bearer test-key',
+  }]);
+  expect(upgrades[0].url).not.toContain('test-key');
+});
+
 describe('currentConnection timeout budgeting', () => {
   it(
     'bounds lock-wait + connect by timeoutMs while a 10s prewarm holds the lock, ' +

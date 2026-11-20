@@ -1,8 +1,7 @@
 /**
- * A master key reaches the server as an `Authorization` header on every
+ * An API key reaches the server as an `Authorization` header on every
  * socket (TTS, ASR, enhance), from both BUILT entry points through the real
- * `ws` package, and never as part of the upgrade URL. An API key still rides
- * the query.
+ * `ws` package, and stays out of the upgrade URL.
  *
  * Built package in a child process against a real local server
  * (`wire/harness.ts`). Requires `npm run build` first.
@@ -14,15 +13,15 @@ import { API_KEY, runChild, startWireServer } from './wire/harness';
 
 const SOCKETS = ['stream', 'stream_unpooled', 'session', 'multi', 'asr', 'enhance', 'enhance_session'] as const;
 
-describe.concurrent('master key on the wire', () => {
+describe.concurrent('API key on the wire', () => {
   for (const entry of ['mjs', 'cjs'] as const) {
-    it(`${entry}: every upgrade carries it as a bearer header, not in the URL`, async () => {
+    it.each([false, true])(`${entry}: every upgrade sends the key in a header (isMasterKey=%s)`, async (isMasterKey) => {
       const server = await startWireServer('accept');
       try {
         const run = await runChild({
           entry,
           apiUrl: server.url,
-          isMasterKey: true,
+          isMasterKey,
           telemetry: false,
           calls: SOCKETS.map((kind) => ({ kind, text: 'Hallo' })),
         });
@@ -41,17 +40,4 @@ describe.concurrent('master key on the wire', () => {
     });
   }
 
-  it('an API key still rides the query, with no authorization header', async () => {
-    const server = await startWireServer('accept');
-    try {
-      await runChild({ apiUrl: server.url, telemetry: false, calls: SOCKETS.map((kind) => ({ kind, text: 'Hallo' })) });
-      expect(server.upgrades.length).toBeGreaterThanOrEqual(SOCKETS.length);
-      for (const upgrade of server.upgrades) {
-        expect(upgrade.url).toContain(`api_key=${API_KEY}`);
-        expect(upgrade.headers.authorization).toBeUndefined();
-      }
-    } finally {
-      await server.close();
-    }
-  });
 });

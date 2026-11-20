@@ -1,14 +1,3 @@
-/**
- * How a socket presents the client's credential.
- *
- * An API key or a token rides the query string (`api_key=` / `token=`),
- * because a browser cannot set headers on a WebSocket upgrade. A master key
- * is sent only as an `Authorization: Bearer` header, so it never appears in a
- * URL; that needs Node.js (the `ws` package and Node's own WebSocket both
- * take upgrade headers). Every socket the SDK opens goes through
- * {@link masterKeyHeaders} and {@link newWebSocket}.
- */
-
 import { KugelAudioError } from './errors';
 import { isNodeJs } from './node-runtime';
 
@@ -23,36 +12,35 @@ export interface CredentialSource {
 export interface SocketCredential {
   /** `name=value` for the socket URL; empty when the credential is a header. */
   query: string;
-  /** Upgrade headers; set only for a master key. */
+  /** Upgrade headers for a Node.js WebSocket. */
   headers?: Record<string, string>;
 }
 
-/** A socket to open: its URL and, for a master key, its upgrade headers. */
+/** A socket to open: its URL and optional upgrade headers. */
 export interface SocketTarget {
   url: string;
   headers?: Record<string, string>;
 }
 
-/**
- * The upgrade headers that carry a master key, or `undefined` when the
- * client's credential rides the query (an API key or a token).
- */
-export function masterKeyHeaders(client: CredentialSource): Record<string, string> | undefined {
-  if (client.isToken || !client.isMasterKey) return undefined;
-  if (!isNodeJs()) {
+let warnedAboutBrowserKey = false;
+
+/** Credentials for a WebSocket upgrade across Node.js and browser runtimes. */
+export function socketCredential(client: CredentialSource): SocketCredential {
+  if (client.isToken) return { query: `token=${encodeURIComponent(client.apiKey)}` };
+  if (isNodeJs()) return { query: '', headers: { Authorization: `Bearer ${client.apiKey}` } };
+  if (client.isMasterKey) {
     throw new KugelAudioError(
       'isMasterKey needs Node.js: the master key is sent as a WebSocket header, which browsers cannot set',
     );
   }
-  return { Authorization: `Bearer ${client.apiKey}` };
-}
-
-/** The TTS sockets' credential: `token=`, `api_key=`, or the master-key header. */
-export function socketCredential(client: CredentialSource): SocketCredential {
-  if (client.isToken) return { query: `token=${client.apiKey}` };
-  const headers = masterKeyHeaders(client);
-  if (headers) return { query: '', headers };
-  return { query: `api_key=${client.apiKey}` };
+  if (!warnedAboutBrowserKey) {
+    warnedAboutBrowserKey = true;
+    console.warn(
+      '[KugelAudio] API key authentication for browser WebSockets is deprecated. ' +
+        'Use a short-lived JWT with isToken: true.',
+    );
+  }
+  return { query: `api_key=${encodeURIComponent(client.apiKey)}` };
 }
 
 /** `base` with the credential's query pair appended, when it has one. */
@@ -64,7 +52,7 @@ export function withCredentialQuery(base: string, credential: SocketCredential):
 type NodeWebSocketCtor = new (url: string, options: { headers: Record<string, string> }) => WebSocket;
 
 /**
- * Construct a socket; `headers` (set only on Node, by {@link masterKeyHeaders})
+ * Construct a socket; `headers` (set only on Node, by {@link socketCredential})
  * go on the upgrade request as the second constructor argument.
  */
 export function newWebSocket(

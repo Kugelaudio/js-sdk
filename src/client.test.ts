@@ -327,11 +327,12 @@ describe('master key on the TTS sockets', () => {
     expectHeaderOnly('/ws/tts/multi?sdk=');
   });
 
-  it('an API key still rides the query with no headers', async () => {
+  it('an API key also goes in the Authorization header', async () => {
     new KugelAudio({ apiKey: 'plain-key' }).tts.toReadable({ text: 'Hi' });
     await new Promise<void>((r) => setTimeout(r, 10));
-    expect(mockWs.url).toContain('/ws/tts?api_key=plain-key');
-    expect(mockWs.options).toBeUndefined();
+    expect(mockWs.url).toContain('/ws/tts?sdk=');
+    expect(mockWs.url).not.toContain('plain-key');
+    expect(mockWs.options?.headers).toEqual({ Authorization: 'Bearer plain-key' });
   });
 });
 

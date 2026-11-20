@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { KugelAudioError } from './errors';
 import * as runtime from './node-runtime';
-import { masterKeyHeaders, socketCredential, withCredentialQuery } from './ws-auth';
+import { socketCredential, withCredentialQuery } from './ws-auth';
 
 const key = { apiKey: 'secret', isToken: false, isMasterKey: false };
 
 describe('socketCredential', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('puts an API key in the query', () => {
-    expect(socketCredential(key)).toEqual({ query: 'api_key=secret' });
+  it('sends an API key in the Authorization header on Node.js', () => {
+    expect(socketCredential(key)).toEqual({ query: '', headers: { Authorization: 'Bearer secret' } });
   });
 
   it('puts a token in the query, even when isMasterKey is also set', () => {
@@ -28,23 +28,29 @@ describe('socketCredential', () => {
   });
 });
 
-describe('masterKeyHeaders (ASR and enhance sockets)', () => {
+describe('browser WebSocket credentials', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('is undefined for an API key and for a token, which ride the query', () => {
-    expect(masterKeyHeaders(key)).toBeUndefined();
-    expect(masterKeyHeaders({ ...key, isToken: true, isMasterKey: true })).toBeUndefined();
+  it('preserves JWT authentication without warning', () => {
+    vi.spyOn(runtime, 'isNodeJs').mockReturnValue(false);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(socketCredential({ ...key, apiKey: 'a.b.c', isToken: true })).toEqual({ query: 'token=a.b.c' });
+    expect(warn).not.toHaveBeenCalled();
   });
 
-  it('is the bearer header for a master key, and refuses one outside Node.js', () => {
-    expect(masterKeyHeaders({ ...key, isMasterKey: true })).toEqual({ Authorization: 'Bearer secret' });
+  it('preserves legacy API key authentication and warns once without logging the key', () => {
     vi.spyOn(runtime, 'isNodeJs').mockReturnValue(false);
-    expect(() => masterKeyHeaders({ ...key, isMasterKey: true })).toThrow(KugelAudioError);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(socketCredential(key)).toEqual({ query: 'api_key=secret' });
+    expect(socketCredential({ ...key, apiKey: 'another-key' })).toEqual({ query: 'api_key=another-key' });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toContain('isToken: true');
+    expect(warn.mock.calls[0][0]).not.toContain('secret');
   });
 });
 
 describe('withCredentialQuery', () => {
   it('appends the query pair', () => {
-    expect(withCredentialQuery('wss://h/ws/tts', { query: 'api_key=k' })).toBe('wss://h/ws/tts?api_key=k');
+    expect(withCredentialQuery('wss://h/ws/tts', { query: 'token=a.b.c' })).toBe('wss://h/ws/tts?token=a.b.c');
   });
 });

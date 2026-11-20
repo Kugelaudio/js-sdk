@@ -379,7 +379,8 @@ describe('client.enhance.stream', () => {
     const url = new URL(ws.url);
     expect(url.protocol).toBe('wss:');
     expect(url.pathname).toBe('/v1/audio/enhance/stream');
-    expect(url.searchParams.get('api_key')).toBe('test-key');
+    expect(url.searchParams.has('api_key')).toBe(false);
+    expect(url.href).not.toContain('test-key');
     expect(url.searchParams.get('sdk')).toBe('js');
     expect(ws.textMessages[0]).toEqual({
       type: 'config',

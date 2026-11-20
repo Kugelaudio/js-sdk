@@ -154,7 +154,8 @@ describe('client.asr.stream', () => {
     const url = new URL(ws.url);
     expect(url.protocol).toBe('wss:');
     expect(url.pathname).toBe('/v1/audio/transcriptions/stream');
-    expect(url.searchParams.get('api_key')).toBe('test-key');
+    expect(url.searchParams.has('api_key')).toBe(false);
+    expect(url.href).not.toContain('test-key');
     expect(url.searchParams.get('sdk')).toBe('js');
     expect(ws.sent[0]).toEqual({ type: 'config', sample_rate: 16000 });
     expect(ws.sent.slice(1, -1).every((m) => m.type === 'audio_chunk')).toBe(true);

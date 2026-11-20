@@ -43,7 +43,6 @@ import { authHeaders, base64ToArrayBuffer, clampCfgScale, parseWordTimestamps } 
 import { nodeReadable } from './node-runtime';
 import { getWebSocket, loadWebSocket } from './websocket';
 import {
-    masterKeyHeaders,
     newWebSocket,
     socketCredential,
     withCredentialQuery,
@@ -2878,21 +2877,22 @@ export class KugelAudio {
   }
 
   /**
-   * Socket for `path` on the API host: `query`, the credential (`api_key=`,
-   * `token=` + `org_id=`, or the master key as an upgrade header) and the SDK query.
+   * Build a socket target on the API host with credentials and SDK metadata.
    * @internal
    */
   apiSocket(path: string, query: Record<string, string> = {}): SocketTarget {
     const base = this._apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
-    const headers = masterKeyHeaders(this);
-    const params: Record<string, string> = headers
-      ? { ...query }
-      : { [this.isToken ? 'token' : 'api_key']: this.apiKey, ...query };
+    const credential = socketCredential(this);
+    const params = new URLSearchParams(credential.query);
+    for (const [name, value] of Object.entries(query)) params.set(name, value);
     if (this.isToken && this._orgId !== undefined) {
-      params.org_id = String(this._orgId);
+      params.set('org_id', String(this._orgId));
     }
-    const search = new URLSearchParams(params).toString();
-    return { url: appendSdkQuery(search ? `${base}${path}?${search}` : `${base}${path}`), headers };
+    const search = params.toString();
+    return {
+      url: appendSdkQuery(search ? `${base}${path}?${search}` : `${base}${path}`),
+      headers: credential.headers,
+    };
   }
 
   /** Get keepalive ping interval in milliseconds, or null if disabled. */

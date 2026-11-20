@@ -62,9 +62,9 @@ export function appendSdkQuery(url: string): string {
  * Build the `wss://.../ws/tts/multi` URL from an `https://`/`http://` base URL.
  * The API key is passed as a query parameter, matching the Python plugin.
  */
-export function buildMultiWsUrl(baseUrl: string, apiKey: string): string {
+export function buildMultiWsUrl(baseUrl: string): string {
   const wsBase = baseUrl.replace('https://', 'wss://').replace('http://', 'ws://');
-  return appendSdkQuery(`${wsBase}/ws/tts/multi?api_key=${apiKey}`);
+  return appendSdkQuery(`${wsBase}/ws/tts/multi`);
 }
 
 /**

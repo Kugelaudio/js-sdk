@@ -19,10 +19,10 @@ const opts: WireOptions = {
 };
 
 describe('buildMultiWsUrl', () => {
-  it('rewrites https to wss and targets /ws/tts/multi with the api key', () => {
-    const url = buildMultiWsUrl('https://api.kugelaudio.com', 'secret');
+  it('rewrites https to wss and targets /ws/tts/multi with SDK metadata', () => {
+    const url = buildMultiWsUrl('https://api.kugelaudio.com');
     expect(url).toContain('wss://api.kugelaudio.com/ws/tts/multi');
-    expect(url).toContain('api_key=secret');
+    expect(new URL(url).searchParams.has('api_key')).toBe(false);
   });
 
 });
