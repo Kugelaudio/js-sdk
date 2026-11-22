@@ -62,7 +62,17 @@ export interface TranscriptionStreamOptions {
    * applies none.
    */
   dictionaryIds?: number[];
+  /**
+   * `true` labels who is talking: partials get `turn_index`, `speaker` and
+   * `speaker_segments`, and each closed turn a `speaker_labels` frame with its
+   * text split into `speaker_parts`. Needs 16 kHz audio.
+   */
+  speakerLabels?: boolean;
 }
+
+const SPEAKER_LABELS_RATE = 16000;
+/** Frames that carry no transcript text; the SDK fills the result's required fields. */
+const SPEAKER_LABEL_FRAMES = new Set(['speaker_labels', 'speaker_labels_stopped']);
 
 // ------------------------------------------------------------ validation
 
@@ -119,6 +129,15 @@ function streamConfig(audio: unknown, options: TranscriptionStreamOptions): Stre
   if (options.boostedPhrases !== undefined) config.boosted_phrases = options.boostedPhrases;
   if (options.projectId !== undefined) config.project_id = options.projectId;
   if (options.dictionaryIds !== undefined) config.dictionary_ids = options.dictionaryIds;
+  if (options.speakerLabels !== undefined) {
+    if (options.speakerLabels && config.sample_rate !== SPEAKER_LABELS_RATE) {
+      throw new ValidationError(
+        `speakerLabels needs ${SPEAKER_LABELS_RATE} Hz audio, got ${config.sample_rate} Hz; ` +
+          'resample to 16 kHz or turn speakerLabels off.',
+      );
+    }
+    config.speaker_labels = options.speakerLabels;
+  }
   return config;
 }
 
@@ -218,6 +237,8 @@ async function* runStream(
       if ('error' in message) throw classifyWsFrame(message as Parameters<typeof classifyWsFrame>[0]);
       if (message.type === 'partial' || message.type === 'alternatives') {
         yield message as StreamingTranscriptionResult;
+      } else if (typeof message.type === 'string' && SPEAKER_LABEL_FRAMES.has(message.type)) {
+        yield { partial_text: '', is_final: false, word_alternatives: [], ...message } as unknown as StreamingTranscriptionResult;
       }
     }
   } finally {
@@ -267,6 +288,8 @@ export class ASRResource {
    * @returns Partial, final and alternatives frames. A frame with
    *   `revises_final: true` carries a more accurate transcript of the whole
    *   turn and its `language`.
+   *   With `speakerLabels`, also `speaker_labels` and
+   *   `speaker_labels_stopped` frames; check `event.type`.
    * @example
    * ```typescript
    * const audio = await loadAudioStream('call.wav');

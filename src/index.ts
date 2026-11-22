@@ -66,6 +66,8 @@ export type {
     MultiContextConfig,
     SessionUsage,
     SettingsUpdate,
+    SpeakerPart,
+    SpeakerSegment,
     StreamCallbacks,
     StreamConfig,
     SpellingAlternative,

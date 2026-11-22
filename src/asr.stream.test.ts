@@ -190,6 +190,59 @@ describe('client.asr.stream', () => {
     });
   });
 
+  it('sends speaker_labels and yields speaker-label frames with the required fields filled', async () => {
+    const labelled = {
+      ...PARTIAL,
+      turn_index: 0,
+      speaker: 'Speaker 1',
+      speaker_segments: [{ speaker: 'Speaker 1', start_s: 0, end_s: 1.5 }],
+    };
+    const labels = {
+      type: 'speaker_labels',
+      turn_index: 0,
+      speaker: 'Speaker 1',
+      speaker_segments: [
+        { speaker: 'Speaker 1', start_s: 0, end_s: 1.5 },
+        { speaker: 'Speaker 2', start_s: 1.5, end_s: 3 },
+      ],
+      speaker_parts: [
+        { speaker: 'Speaker 1', text: 'Hallo', start_s: 0.1, end_s: 1.4 },
+        { speaker: 'Speaker 2', text: 'Welt', start_s: 1.6, end_s: 2.9 },
+      ],
+    };
+    server = (ws, message) => {
+      if (message.type === 'end_of_speech') {
+        ws.emit(labelled);
+        ws.emit(FINAL);
+        ws.emit(labels);
+        ws.emit({ type: 'speaker_labels_stopped' });
+        ws.serverClose(1000, '');
+      }
+    };
+    const events = await collect(client().asr.stream([pcm(0.1)], { sampleRate: 16000, speakerLabels: true }));
+    expect(FakeWs.last!.sent[0]).toEqual({ type: 'config', sample_rate: 16000, speaker_labels: true });
+    expect(events.map((e) => e.type)).toEqual(['partial', 'partial', 'speaker_labels', 'speaker_labels_stopped']);
+    expect(events[0]).toEqual(labelled);
+    expect(events[2]).toEqual({ partial_text: '', is_final: false, word_alternatives: [], ...labels });
+    expect(events[2].speaker_parts?.map((p) => [p.speaker, p.text])).toEqual([
+      ['Speaker 1', 'Hallo'],
+      ['Speaker 2', 'Welt'],
+    ]);
+    expect(events[3]).toEqual({
+      type: 'speaker_labels_stopped',
+      partial_text: '',
+      is_final: false,
+      word_alternatives: [],
+    });
+  });
+
+  it('refuses speakerLabels below 16 kHz before connecting', () => {
+    expect(() => client().asr.stream([pcm(0.1, 8000)], { sampleRate: 8000, speakerLabels: true })).toThrow(
+      /speakerLabels needs 16000 Hz/,
+    );
+    expect(FakeWs.last).toBeNull();
+  });
+
   it('passes a single language through as a string', async () => {
     await collect(client().asr.stream([pcm(0.1)], { sampleRate: 16000, language: 'de' }));
     expect(FakeWs.last!.sent[0]).toEqual({ type: 'config', sample_rate: 16000, language: 'de' });

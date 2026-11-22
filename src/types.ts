@@ -29,6 +29,21 @@ export interface WordAlternatives {
   alternatives: SpellingAlternative[];
 }
 
+/** A stretch of one speaker's speech in a turn, in seconds of the stream. */
+export interface SpeakerSegment {
+  speaker: string;
+  start_s: number;
+  end_s: number;
+}
+
+/** One speaker's words in a closed turn; `speaker` is `null` when no speech was heard. */
+export interface SpeakerPart {
+  speaker: string | null;
+  text: string;
+  start_s: number;
+  end_s: number;
+}
+
 export interface TranscriptionResponse {
   /** OpenAI-compatible transcript field. */
   text: string;
@@ -94,6 +109,8 @@ export interface StreamingTranscriptionConfig {
    * holds longer through a pause mid-thought, so fewer turns are cut off early.
    */
   turn_detection_level?: 'responsive' | 'conservative';
+  /** `true` labels who is talking. Needs `sample_rate` 16000. */
+  speaker_labels?: boolean;
 }
 
 export interface StreamingAudioChunk {
@@ -103,8 +120,14 @@ export interface StreamingAudioChunk {
 }
 
 export interface StreamingTranscriptionResult {
-  /** `alternatives` is an additive post-final uncertainty update. */
-  type: 'partial' | 'alternatives';
+  /**
+   * `alternatives` is an additive post-final uncertainty update. With
+   * `speakerLabels`, `speaker_labels` gives a closed turn's final labels (a
+   * later one for the same `turn_index` replaces it) and
+   * `speaker_labels_stopped` says labelling stopped while the transcript goes
+   * on; both carry `partial_text: ''` and are not transcript text.
+   */
+  type: 'partial' | 'alternatives' | 'speaker_labels' | 'speaker_labels_stopped';
   /** Complete rolling hypothesis; replace the previous value. */
   partial_text: string;
   is_final: boolean;
@@ -130,6 +153,14 @@ export interface StreamingTranscriptionResult {
   turn_end_confidence?: number;
   turn_end_inference_ms?: number;
   word_alternatives: WordAlternatives[];
+  /** With `speakerLabels`: the turn this frame belongs to, counted from 0. */
+  turn_index?: number;
+  /** With `speakerLabels`: the speaker heard most in the turn so far, `null` before any speech. */
+  speaker?: string | null;
+  /** With `speakerLabels`: who spoke when in the turn so far. */
+  speaker_segments?: SpeakerSegment[];
+  /** On a `speaker_labels` frame: the turn's text split wherever the speaker changes. */
+  speaker_parts?: SpeakerPart[];
   [key: string]: unknown;
 }
 
