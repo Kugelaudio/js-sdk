@@ -310,7 +310,7 @@ function sendUpdateSettings(
         return;
       }
       if (data?.error) {
-        finish(() => reject(new KugelAudioError(String(data!.error))));
+        finish(() => reject(classifyWsFrame(data!)));
         return;
       }
       // Unrelated frame (e.g. stray audio from a draining turn): deliver it
@@ -1092,6 +1092,7 @@ class TTSResource {
           model_id: options.modelId || 'kugel-3.5',
           voice_id: options.voiceId,
           cfg_scale: clampCfgScale(options.cfgScale) ?? 2.0,
+          ...(options.temperature !== undefined && { temperature: options.temperature }),
           max_new_tokens: options.maxNewTokens ?? 2048,
           sample_rate: options.sampleRate ?? 24000,
           ...(options.outputFormat && { output_format: options.outputFormat }),
@@ -1354,6 +1355,10 @@ interface PendingTurn {
   frames: Record<string, unknown>[];
   audio: boolean;
   replayed: boolean;
+  /** Frames already charged with a frame-tied error (see `rejectHeadFrame`). */
+  rejectedFrames: number;
+  /** A frame-tied error: the turn fails when it ends, by error or by final. */
+  error?: KugelAudioError;
   /** Diagnostics operation for this turn, minted when its first text is sent. */
   op?: Operation;
 }
@@ -1366,7 +1371,7 @@ function appendTurnFrame(
 ): void {
   let turn = turns[turns.length - 1];
   if (!turn || turn.frames[turn.frames.length - 1]?.flush === true) {
-    turn = { frames: [], audio: false, replayed: false };
+    turn = { frames: [], audio: false, replayed: false, rejectedFrames: 0 };
     turns.push(turn);
   }
   turn.frames.push(frame);
@@ -1386,8 +1391,57 @@ function settleTurnOps(
 }
 
 /**
+ * A `/ws/tts/multi` error frame. A per-context frame carries `context_id` and,
+ * from servers that send it, `turn_ended`: true when the error ended the
+ * context's current turn (no `final` follows), false when the turn stays open
+ * and a later flush still yields its `final`.
+ */
+interface MultiContextErrorFrame {
+  error: string;
+  error_code?: string;
+  code?: number;
+  retry_after?: number;
+  request_id?: string;
+  context_id?: string;
+  turn_ended?: boolean;
+}
+
+/**
+ * Per-context `/ws/tts/multi` error codes ingress sends while handling one
+ * input frame: the voice check (`MISSING_VOICE_ID`) and runner start or push
+ * (`NOT_FOUND`, `UNAUTHORIZED` for a model-access denial, `INTERNAL_ERROR`
+ * before the context streamed). Each answers one frame; the turn ends at its
+ * flush frame (error, no final) or at the final of a separate flush.
+ * `VALIDATION_ERROR` is excluded: without `turn_ended` the SDK cannot tell a
+ * rejected frame from a failed runner start, so it leaves the turn to its
+ * final. These lists are only the fallback for a server that sends error
+ * frames without `turn_ended`.
+ */
+const FRAME_ERROR_CODES = new Set(['MISSING_VOICE_ID', 'NOT_FOUND', 'UNAUTHORIZED', 'INTERNAL_ERROR']);
+
+/** Stream failures after the context streamed: the turn ends, no final follows. */
+const STREAM_ERROR_CODES = new Set(['INTERNAL_ERROR', 'MODEL_UNAVAILABLE']);
+
+/**
+ * Whether ingress answers `frame` with one error of `code`. Before the context
+ * exists every frame reaches context creation. After that, the voice check
+ * rejects any text or flush, while a runner start or push failure rejects only
+ * text: a lone flush with no runner gets an empty final.
+ */
+function frameAnswersError(
+  frame: Record<string, unknown>,
+  contextExists: boolean,
+  code: unknown,
+): boolean {
+  if (!contextExists) return true;
+  const hasText = typeof frame.text === 'string' && frame.text.length > 0;
+  return hasText || (code === 'MISSING_VOICE_ID' && frame.flush === true);
+}
+
+/**
  * Multi-context WebSocket session for concurrent TTS streams.
  */
+
 class MultiContextSession {
   private ws: WebSocket | null = null;
   private config: import('./types').MultiContextConfig;
@@ -1396,6 +1450,9 @@ class MultiContextSession {
   /** Contexts a create message has been sent for (not yet necessarily
    *  confirmed by the server via context_created). */
   private requestedContexts: Set<string> = new Set();
+  private awaitingContextCreation = new Set<string>();
+  /** Contexts that streamed (generation_started or audio) on this socket. */
+  private streamedContexts = new Set<string>();
   private _sessionId: string | null = null;
   private _contextUsage: Map<string, import('./types').SessionUsage> = new Map();
   private isStarted = false;
@@ -1528,13 +1585,35 @@ class MultiContextSession {
         const data = JSON.parse(messageData);
 
         if (data.error) {
-          const frameErr = classifyWsFrame(data);
-          // A context's error fails that context's turn; a session error
-          // (no context id) fails every turn in flight.
+          const frame = data as MultiContextErrorFrame;
+          const frameErr = classifyWsFrame(frame);
+          // A terminal context error fails the head turn. Recoverable frame
+          // errors are reported to onError while the turn can still finish.
+          // A session error without a context id fails all turns in flight.
           const failed: Operation[] = [];
-          if (data.context_id) {
-            const op = this.headTurn(data.context_id)?.op;
-            if (op) failed.push(op);
+          if (frame.context_id) {
+            // Ingress answers the empty-text create frame (context_created or
+            // one error) before it processes queued text, so an error while
+            // creation is pending rejects the create frame, not a turn.
+            const id = frame.context_id;
+            const code = frame.error_code;
+            const exists = this.contexts.has(id);
+            const streamed = this.streamedContexts.has(id);
+            const frameTied = !exists || (code !== undefined && FRAME_ERROR_CODES.has(code));
+            if (this.awaitingContextCreation.delete(id)) {
+              // The create frame was rejected; no turn owns it.
+            } else if (typeof frame.turn_ended === 'boolean') {
+              // The server says whether this error ended the head turn.
+              const isStreamError = code !== undefined && STREAM_ERROR_CODES.has(code);
+              const op = this.applyTurnEnded(id, frame.turn_ended, frameErr, frameTied || isStreamError)?.op;
+              if (op) failed.push(op);
+            } else if (code !== undefined && STREAM_ERROR_CODES.has(code) && exists && streamed) {
+              const op = this.contextTurns.get(id)?.shift()?.op;
+              if (op) failed.push(op);
+            } else if (frameTied) {
+              const op = this.rejectHeadFrame(id, exists, code, frameErr)?.op;
+              if (op) failed.push(op);
+            }
           } else {
             settleTurnOps(this.contextTurns.values(), (op) => failed.push(op));
           }
@@ -1542,9 +1621,13 @@ class MultiContextSession {
             op.markServerError(frameErr);
             op.fail(frameErr);
           }
-          this.callbacks.onError?.(frameErr, data.context_id);
+          this.callbacks.onError?.(frameErr, frame.context_id);
           return;
         }
+
+        // Any other frame for a context (context_created, audio, final)
+        // shows ingress is past its create frame.
+        if (data.context_id) this.awaitingContextCreation.delete(data.context_id);
 
         if (data.session_started) {
           this._sessionId = data.session_id;
@@ -1553,8 +1636,13 @@ class MultiContextSession {
         }
 
         if (data.context_created) {
+          this.isStarted = true;
           this.contexts.add(data.context_id);
           this.callbacks.onContextCreated?.(data.context_id);
+        }
+
+        if ((data.audio || data.generation_started) && data.context_id) {
+          this.streamedContexts.add(data.context_id);
         }
 
         if (data.audio) {
@@ -1563,7 +1651,7 @@ class MultiContextSession {
           turn?.op?.recordChunk(base64ByteLength(data.audio));
           const chunk: import('./types').MultiContextAudioChunk = {
             audio: data.audio,
-            encoding: 'pcm_s16le',
+            encoding: data.enc || 'pcm_s16le',
             index: data.idx || 0,
             sampleRate: data.sr || 24000,
             samples: data.samples || 0,
@@ -1576,7 +1664,13 @@ class MultiContextSession {
           // Per-context end-of-audio marker (KUG-1238): all audio admitted
           // before the client's flush has been delivered; also precedes
           // context_closed on a graceful close. Ends the context's turn.
-          this.contextTurns.get(data.context_id)?.shift()?.op?.succeed();
+          const turn = this.contextTurns.get(data.context_id)?.shift();
+          if (turn?.error) {
+            turn.op?.markServerError(turn.error);
+            turn.op?.fail(turn.error);
+          } else {
+            turn?.op?.succeed();
+          }
           this.callbacks.onFinal?.(data.context_id);
         }
 
@@ -1588,6 +1682,7 @@ class MultiContextSession {
           this.requestedContexts.delete(data.context_id);
           this.contextOptions.delete(data.context_id);
           this.contextTurns.delete(data.context_id);
+          this.streamedContexts.delete(data.context_id);
           // Per-context (per-conversation) usage rides on context_closed.
           const ctxUsage = parseSessionUsage(data) ?? undefined;
           if (ctxUsage) this._contextUsage.set(data.context_id, ctxUsage);
@@ -1604,6 +1699,7 @@ class MultiContextSession {
           this.requestedContexts.delete(data.context_id);
           this.contextOptions.delete(data.context_id);
           this.contextTurns.delete(data.context_id);
+          this.streamedContexts.delete(data.context_id);
           this.callbacks.onContextTimeout?.(data.context_id);
         }
 
@@ -1708,6 +1804,53 @@ class MultiContextSession {
     this.isStarted = false;
     this.contexts.clear();
     this.requestedContexts.clear();
+    this.awaitingContextCreation.clear();
+    this.streamedContexts.clear();
+  }
+
+  /**
+   * Settle the head turn from a server-sent `turn_ended` flag: true ends it
+   * (no final follows); false keeps it for its final, which fails it when
+   * `charge` records the error on the turn. Returns the ended turn.
+   */
+  private applyTurnEnded(
+    contextId: string,
+    turnEnded: boolean,
+    err: KugelAudioError,
+    charge: boolean,
+  ): PendingTurn | undefined {
+    const turns = this.contextTurns.get(contextId);
+    const turn = turns?.[0];
+    if (!turns || !turn) return undefined;
+    if (turnEnded) {
+      turns.shift();
+      return turn;
+    }
+    if (charge) turn.error = err;
+    return undefined;
+  }
+
+  /**
+   * Charge a frame-tied error to the head turn's next frame that ingress
+   * answers with it. Returns the turn when that frame was its flush: the turn
+   * is over and no final follows. Otherwise the turn fails at its final.
+   */
+  private rejectHeadFrame(
+    contextId: string,
+    contextExists: boolean,
+    code: unknown,
+    err: KugelAudioError,
+  ): PendingTurn | undefined {
+    const turns = this.contextTurns.get(contextId);
+    const turn = turns?.[0];
+    if (!turns || !turn) return undefined;
+    let i = turn.rejectedFrames;
+    while (i < turn.frames.length && !frameAnswersError(turn.frames[i], contextExists, code)) i++;
+    turn.rejectedFrames = i + 1;
+    turn.error = err;
+    if (turn.frames[i]?.flush !== true) return undefined;
+    turns.shift();
+    return turn;
   }
 
   /**
@@ -1787,6 +1930,9 @@ class MultiContextSession {
     for (const id of ids) {
       for (const turn of this.contextTurns.get(id) ?? []) {
         turn.replayed = true;
+        // Ingress answers the resent frames afresh.
+        turn.rejectedFrames = 0;
+        turn.error = undefined;
         for (const frame of turn.frames) {
           this.ws?.send(JSON.stringify({ ...frame, context_id: id }));
         }
@@ -1822,9 +1968,12 @@ class MultiContextSession {
     }
     this.contextOptions.set(contextId, options);
     this.requestedContexts.add(contextId);
+    if (!this.contexts.has(contextId)) this.awaitingContextCreation.add(contextId);
 
+    // Empty text: ingress acks the creation and stops, so voice validation
+    // and runner admission answer the first text frame, which owns the turn.
     const msg: Record<string, unknown> = {
-      text: ' ',
+      text: '',
       context_id: contextId,
     };
 

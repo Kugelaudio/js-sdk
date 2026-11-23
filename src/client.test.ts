@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { KugelAudio } from './client';
-import { ConnectionError, KugelAudioError, RateLimitError, ServerRestartingError } from './errors';
+import { ConnectionError, KugelAudioError, RateLimitError, ServerRestartingError, ValidationError } from './errors';
 import * as runtime from './node-runtime';
 import { parseSessionUsage } from './types';
 
@@ -1132,6 +1132,453 @@ describe('MultiContextSession createContext wire format (KUG-1233)', () => {
     expect(frames[0].voice_settings.voice_id).toBe(42);
     expect(frames[1].text).toBe('again');
   });
+
+  it('preserves server audio encoding (mulaw/alaw) on MultiContextAudioChunk', async () => {
+    const chunks: Array<{ encoding: string; sampleRate: number }> = [];
+    const session = client.tts.createMultiContextSession({
+      defaultVoiceId: 42,
+      outputFormat: 'ulaw_8000',
+    });
+    await session.connect({
+      onChunk: (chunk) => chunks.push({ encoding: chunk.encoding, sampleRate: chunk.sampleRate }),
+    });
+
+    mockWs.onmessage?.({
+      data: JSON.stringify({
+        audio: Buffer.alloc(16, 0x7f).toString('base64'),
+        enc: 'mulaw',
+        idx: 0,
+        sr: 8000,
+        samples: 16,
+        context_id: 'a',
+      }),
+    });
+
+    expect(chunks).toEqual([{ encoding: 'mulaw', sampleRate: 8000 }]);
+  });
+
+  it('marks session started on context_created (real /ws/tts/multi does not send session_started)', async () => {
+    const session = client.tts.createMultiContextSession({
+      defaultVoiceId: 42,
+      language: 'en',
+      projectId: 7,
+      dictionaryIds: [120],
+    });
+    await session.connect({});
+
+    session.createContext('a');
+    mockWs.onmessage?.({
+      data: JSON.stringify({ context_created: true, context_id: 'a' }),
+    });
+    session.createContext('b');
+
+    const frames = mockWs.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(frames[0].project_id).toBe(7);
+    expect(frames[0].dictionary_ids).toEqual([120]);
+    expect(frames[1]).not.toHaveProperty('project_id');
+    expect(frames[1]).not.toHaveProperty('dictionary_ids');
+    expect(frames[1]).not.toHaveProperty('language');
+  });
+
+  it('removes a terminal failed turn from the context queue so subsequent turns stay aligned', async () => {
+    vi.useFakeTimers();
+    try {
+      const session = client.tts.createMultiContextSession({ defaultVoiceId: 7, language: 'en' });
+      const connectP = session.connect({});
+      await vi.advanceTimersByTimeAsync(1);
+      await connectP;
+
+      // Turn 1 fails with a terminal per-context error frame (no final follows),
+      // after ingress acknowledged the create frame.
+      session.send('a', 'bad turn', true);
+      mockWs.onmessage?.({ data: JSON.stringify({ context_created: true, context_id: 'a' }) });
+      mockWs.onmessage?.({
+        data: JSON.stringify({
+          error: 'Voice not found',
+          error_code: 'NOT_FOUND',
+          code: 404,
+          context_id: 'a',
+        }),
+      });
+
+      // Turn 2 completes normally with audio + final.
+      session.send('a', 'good turn', true);
+      mockWs.onmessage?.({
+        data: JSON.stringify({ ...JSON.parse(makeAudioMsg(0)), context_id: 'a' }),
+      });
+      mockWs.onmessage?.({ data: JSON.stringify({ final: true, context_id: 'a' }) });
+
+      // A rolling-deploy 1012 afterwards must NOT replay the already-completed turn 2.
+      mockWs.onclose?.({ code: 1012 });
+      await vi.advanceTimersByTimeAsync(1100);
+
+      const replayedTexts = mockWs.send.mock.calls
+        .map((c) => JSON.parse(c[0] as string))
+        .filter((f) => typeof f.text === 'string' && f.text.trim() !== '')
+        .map((f) => f.text);
+      expect(replayedTexts).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails a multi-frame turn only at its rejected flush frame while the context does not exist', async () => {
+    vi.useFakeTimers();
+    const recordFailure = vi.spyOn(client.diagnostics, 'recordFailure');
+    const recordSuccess = vi.spyOn(client.diagnostics, 'recordSuccess');
+    try {
+      const session = client.tts.createMultiContextSession({ defaultVoiceId: 7, language: 'en' });
+      const connectP = session.connect({});
+      await vi.advanceTimersByTimeAsync(1);
+      await connectP;
+      recordSuccess.mockClear();
+
+      session.send('a', 'turn A part one', false);
+      session.send('a', 'turn A part two', true);
+      session.send('a', 'turn B', true);
+      const capacityError = {
+        data: JSON.stringify({
+          error: 'Too many concurrent contexts',
+          error_code: 'TOO_MANY_CONTEXTS',
+          code: 429,
+          context_id: 'a',
+        }),
+      };
+      // Ingress rejects the create frame and both frames of turn A, then
+      // capacity frees and turn B's frame opens the context and streams.
+      mockWs.onmessage?.(capacityError);
+      mockWs.onmessage?.(capacityError);
+      expect(recordFailure).not.toHaveBeenCalled();
+      mockWs.onmessage?.(capacityError);
+      expect(recordFailure).toHaveBeenCalledOnce();
+      mockWs.onmessage?.({ data: JSON.stringify({ context_created: true, context_id: 'a' }) });
+      mockWs.onmessage?.({
+        data: JSON.stringify({ ...JSON.parse(makeAudioMsg(0)), context_id: 'a' }),
+      });
+      mockWs.onmessage?.({ data: JSON.stringify({ final: true, context_id: 'a' }) });
+      expect(recordSuccess).toHaveBeenCalledOnce();
+      expect(recordFailure).toHaveBeenCalledOnce();
+    } finally {
+      recordFailure.mockRestore();
+      recordSuccess.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('fails a turn whose runner start is denied with a scoped UNAUTHORIZED (no final follows)', async () => {
+    vi.useFakeTimers();
+    try {
+      const session = client.tts.createMultiContextSession({ defaultVoiceId: 7, language: 'en' });
+      const connectP = session.connect({});
+      await vi.advanceTimersByTimeAsync(1);
+      await connectP;
+
+      session.send('a', 'denied turn', true);
+      mockWs.onmessage?.({ data: JSON.stringify({ context_created: true, context_id: 'a' }) });
+      mockWs.onmessage?.({
+        data: JSON.stringify({
+          error: 'Model access denied',
+          error_code: 'UNAUTHORIZED',
+          code: 403,
+          context_id: 'a',
+        }),
+      });
+
+      // The denied turn is over: a 1012 close must not replay it.
+      mockWs.onclose?.({ code: 1012 });
+      await vi.advanceTimersByTimeAsync(1100);
+
+      const replayedTexts = mockWs.send.mock.calls
+        .map((c) => JSON.parse(c[0] as string))
+        .filter((f) => typeof f.text === 'string' && f.text.trim() !== '')
+        .map((f) => f.text);
+      expect(replayedTexts).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ends a turn whose runner start failed at the empty final of its separate flush', async () => {
+    vi.useFakeTimers();
+    const recordFailure = vi.spyOn(client.diagnostics, 'recordFailure');
+    const recordSuccess = vi.spyOn(client.diagnostics, 'recordSuccess');
+    try {
+      const session = client.tts.createMultiContextSession({ defaultVoiceId: 7, language: 'en' });
+      const connectP = session.connect({});
+      await vi.advanceTimersByTimeAsync(1);
+      await connectP;
+      recordSuccess.mockClear();
+
+      session.send('a', 'turn A', false);
+      session.flush('a');
+      session.send('a', 'turn B', true);
+      const denied = {
+        data: JSON.stringify({
+          error: 'Model access denied',
+          error_code: 'UNAUTHORIZED',
+          code: 403,
+          context_id: 'a',
+        }),
+      };
+      // Ingress: create ack; A's text fails runner start; A's flush has no
+      // runner and answers an empty final; B's text fails runner start.
+      mockWs.onmessage?.({ data: JSON.stringify({ context_created: true, context_id: 'a' }) });
+      mockWs.onmessage?.(denied);
+      expect(recordFailure).not.toHaveBeenCalled();
+      mockWs.onmessage?.({ data: JSON.stringify({ final: true, context_id: 'a' }) });
+      expect(recordFailure).toHaveBeenCalledOnce();
+      mockWs.onmessage?.(denied);
+      expect(recordFailure).toHaveBeenCalledTimes(2);
+      expect(recordSuccess).not.toHaveBeenCalled();
+    } finally {
+      recordFailure.mockRestore();
+      recordSuccess.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('counts frame rejections afresh when a reconnect replays a partially rejected turn', async () => {
+    vi.useFakeTimers();
+    const recordFailure = vi.spyOn(client.diagnostics, 'recordFailure');
+    const recordSuccess = vi.spyOn(client.diagnostics, 'recordSuccess');
+    try {
+      const session = client.tts.createMultiContextSession({ defaultVoiceId: 7, language: 'en' });
+      const connectP = session.connect({});
+      await vi.advanceTimersByTimeAsync(1);
+      await connectP;
+
+      session.send('a', 'turn A part one', false);
+      session.send('a', 'turn A part two', true);
+      session.send('a', 'turn B', true);
+      const capacityError = {
+        data: JSON.stringify({
+          error: 'Too many concurrent contexts',
+          error_code: 'TOO_MANY_CONTEXTS',
+          code: 429,
+          context_id: 'a',
+        }),
+      };
+      // Capacity rejects the create frame and A's first frame, then a 1012.
+      mockWs.onmessage?.(capacityError);
+      mockWs.onmessage?.(capacityError);
+      mockWs.onclose?.({ code: 1012 });
+      await vi.advanceTimersByTimeAsync(1100);
+      recordSuccess.mockClear();
+
+      // The replay resends every frame: capacity rejects the create and both
+      // of A's frames, then B opens the context and streams.
+      mockWs.onmessage?.(capacityError);
+      mockWs.onmessage?.(capacityError);
+      expect(recordFailure).not.toHaveBeenCalled();
+      mockWs.onmessage?.(capacityError);
+      expect(recordFailure).toHaveBeenCalledOnce();
+      mockWs.onmessage?.({ data: JSON.stringify({ context_created: true, context_id: 'a' }) });
+      mockWs.onmessage?.({
+        data: JSON.stringify({ ...JSON.parse(makeAudioMsg(0)), context_id: 'a' }),
+      });
+      mockWs.onmessage?.({ data: JSON.stringify({ final: true, context_id: 'a' }) });
+      expect(recordSuccess).toHaveBeenCalledOnce();
+      expect(recordFailure).toHaveBeenCalledOnce();
+    } finally {
+      recordFailure.mockRestore();
+      recordSuccess.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the next queued turn when context creation and the first text hit capacity', async () => {
+    vi.useFakeTimers();
+    try {
+      const session = client.tts.createMultiContextSession({ defaultVoiceId: 7, language: 'en' });
+      const connectP = session.connect({});
+      await vi.advanceTimersByTimeAsync(1);
+      await connectP;
+
+      session.send('a', 'first turn', true);
+      session.send('a', 'next queued turn', true);
+      const capacityError = {
+        data: JSON.stringify({
+          error: 'Too many concurrent contexts',
+          error_code: 'TOO_MANY_CONTEXTS',
+          code: 429,
+          context_id: 'a',
+        }),
+      };
+      mockWs.onmessage?.(capacityError); // Separate auto-create frame.
+      mockWs.onmessage?.(capacityError); // First text frame.
+
+      mockWs.onclose?.({ code: 1012 });
+      await vi.advanceTimersByTimeAsync(1100);
+
+      const replayedTexts = mockWs.send.mock.calls
+        .map((c) => JSON.parse(c[0] as string))
+        .filter((f) => typeof f.text === 'string' && f.text.trim() !== '')
+        .map((f) => f.text);
+      expect(replayedTexts).toEqual(['next queued turn']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('creates a context with an empty-text frame so voice checks answer the text frames', async () => {
+    vi.useFakeTimers();
+    const recordFailure = vi.spyOn(client.diagnostics, 'recordFailure');
+    const recordSuccess = vi.spyOn(client.diagnostics, 'recordSuccess');
+    try {
+      const session = client.tts.createMultiContextSession({ defaultVoiceId: 7, language: 'en' });
+      const connectP = session.connect({});
+      await vi.advanceTimersByTimeAsync(1);
+      await connectP;
+      recordSuccess.mockClear();
+
+      session.send('a', 'first turn', true);
+      session.send('a', 'second turn', true);
+      const [create, ...texts] = mockWs.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+      // Ingress returns right after context_created for empty text; a
+      // non-empty create text would also run the voice check and runner start.
+      expect(create.text).toBe('');
+      expect(create).not.toHaveProperty('flush');
+      expect(texts.map((f) => f.text)).toEqual(['first turn', 'second turn']);
+
+      // Real ingress sequence: create ack, then a voice lookup failure on the
+      // first text frame (runner start), then the second turn streams.
+      mockWs.onmessage?.({ data: JSON.stringify({ context_created: true, context_id: 'a' }) });
+      mockWs.onmessage?.({
+        data: JSON.stringify({
+          error: 'Voice lookup temporarily unavailable',
+          error_code: 'INTERNAL_ERROR',
+          code: 503,
+          context_id: 'a',
+        }),
+      });
+      expect(recordFailure).toHaveBeenCalledOnce();
+      mockWs.onmessage?.({
+        data: JSON.stringify({ ...JSON.parse(makeAudioMsg(0)), context_id: 'a' }),
+      });
+      mockWs.onmessage?.({ data: JSON.stringify({ final: true, context_id: 'a' }) });
+      expect(recordSuccess).toHaveBeenCalledOnce();
+    } finally {
+      recordFailure.mockRestore();
+      recordSuccess.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('charges an error on the create frame to the creation, not the first queued turn', async () => {
+    vi.useFakeTimers();
+    try {
+      const session = client.tts.createMultiContextSession({
+        defaultVoiceId: 7,
+        language: 'en',
+        projectId: 3,
+        dictionaryIds: [9],
+      });
+      const connectP = session.connect({});
+      await vi.advanceTimersByTimeAsync(1);
+      await connectP;
+
+      session.send('a', 'first turn', true);
+      session.send('a', 'second turn', true);
+      // The create frame's dictionary check fails before context_created;
+      // the first text frame then opens the context and streams.
+      mockWs.onmessage?.({
+        data: JSON.stringify({
+          error: 'Dictionary selection unavailable',
+          error_code: 'INTERNAL_ERROR',
+          code: 500,
+          context_id: 'a',
+        }),
+      });
+      mockWs.onmessage?.({ data: JSON.stringify({ context_created: true, context_id: 'a' }) });
+      mockWs.onmessage?.({
+        data: JSON.stringify({ ...JSON.parse(makeAudioMsg(0)), context_id: 'a' }),
+      });
+      mockWs.onmessage?.({ data: JSON.stringify({ final: true, context_id: 'a' }) });
+
+      // Only the first turn completed: a 1012 replays the second one.
+      mockWs.onclose?.({ code: 1012 });
+      await vi.advanceTimersByTimeAsync(1100);
+
+      const replayedTexts = mockWs.send.mock.calls
+        .map((c) => JSON.parse(c[0] as string))
+        .filter((f) => typeof f.text === 'string' && f.text.trim() !== '')
+        .map((f) => f.text);
+      expect(replayedTexts).toEqual(['second turn']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps an open turn queued after a non-terminal scoped VALIDATION_ERROR', async () => {
+    vi.useFakeTimers();
+    const recordFailure = vi.spyOn(client.diagnostics, 'recordFailure');
+    const recordSuccess = vi.spyOn(client.diagnostics, 'recordSuccess');
+    const onError = vi.fn();
+    try {
+      const session = client.tts.createMultiContextSession({ defaultVoiceId: 7, language: 'en' });
+      const connectP = session.connect({ onError });
+      await vi.advanceTimersByTimeAsync(1);
+      await connectP;
+      recordSuccess.mockClear();
+
+      // Turn 1 sends valid unflushed text, a malformed frame, then flushes;
+      // Turn 2 is queued right behind it while the server replies asynchronously.
+      session.send('a', 'valid prefix', false);
+      session.send('a', '<prosody rate="bad">x</prosody>', false);
+      session.flush('a');
+      session.send('a', 'queued turn two', true);
+
+      // Server rejects only the malformed frame with VALIDATION_ERROR, leaving
+      // Turn 1 open so its buffered valid text still streams audio + final.
+      mockWs.onmessage?.({
+        data: JSON.stringify({
+          error: 'Malformed prosody tag',
+          error_code: 'VALIDATION_ERROR',
+          code: 400,
+          context_id: 'a',
+        }),
+      });
+      expect(onError).toHaveBeenCalledWith(expect.any(ValidationError), 'a');
+      expect(recordFailure).not.toHaveBeenCalled();
+      mockWs.onmessage?.({
+        data: JSON.stringify({ ...JSON.parse(makeAudioMsg(0)), context_id: 'a' }),
+      });
+      mockWs.onmessage?.({ data: JSON.stringify({ final: true, context_id: 'a' }) });
+      expect(recordSuccess).toHaveBeenCalledOnce();
+
+      // A rolling-deploy 1012 must still replay turn 2 (turn 1's final must not have shifted turn 2).
+      mockWs.onclose?.({ code: 1012 });
+      await vi.advanceTimersByTimeAsync(1100);
+
+      const replayedTexts = mockWs.send.mock.calls
+        .map((c) => JSON.parse(c[0] as string))
+        .filter((f) => typeof f.text === 'string' && f.text.trim() !== '')
+        .map((f) => f.text);
+      expect(replayedTexts).toEqual(['queued turn two']);
+    } finally {
+      recordFailure.mockRestore();
+      recordSuccess.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('TTSResource.stream() without pooling', () => {
+  it('forwards temperature when usePool is false', async () => {
+    const client = new KugelAudio({ apiKey: 'test-key-xxx' });
+    const pending = client.tts.stream(
+      { text: 'Hello', voiceId: 1, language: 'en', temperature: 0.0 },
+      {},
+      false,
+    );
+    await new Promise<void>((r) => setTimeout(r, 10));
+
+    const sent = JSON.parse(mockWs.send.mock.calls[0][0] as string);
+    expect(sent.temperature).toBe(0.0);
+
+    mockWs.onmessage?.({ data: makeFinalMsg(0, 0) });
+    await pending;
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1191,9 +1638,14 @@ describe('updateSettings (KUG-1166)', () => {
         error: 'Invalid settings update: cfg_scale: out of range',
         error_code: 'VALIDATION_ERROR',
         code: 400,
+        request_id: 'req-upd-1',
       }),
     });
-    await expect(p).rejects.toThrow(/Invalid settings update/);
+    const err = await p.catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ValidationError);
+    expect((err as ValidationError).statusCode).toBe(400);
+    expect((err as ValidationError).errorCode).toBe('VALIDATION_ERROR');
+    expect((err as ValidationError).requestId).toBe('req-upd-1');
 
     session.send('Hello.');
     expect(lastSent().cfg_scale).toBe(2.0);
@@ -1472,7 +1924,7 @@ describe('rolling-deploy close codes', () => {
     mockWs.onclose?.({ code: 1012 });
     await replayed();
 
-    expect(sentOn(mockWs).filter(frame => frame.text !== ' ').map(frame => frame.text))
+    expect(sentOn(mockWs).filter(frame => frame.text !== '').map(frame => frame.text))
       .toEqual(['second']);
   });
 
