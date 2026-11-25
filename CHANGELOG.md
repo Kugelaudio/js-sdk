@@ -2,6 +2,16 @@
 
 ## [kugelaudio-v1.9.0](https://github.com/Kugelaudio/KugelAudio/compare/js-sdk-v1.8.0...js-sdk-v1.9.0) (2026-11-23)
 
+### Features
+
+* **js-sdk:** live speaker labels on streaming speech-to-text: `speakerLabels: true` in `asr.stream()` options adds `speaker_labels` and `speaker_labels_stopped` frames with per-turn speaker parts ([#9593](https://github.com/Kugelaudio/KugelAudio/issues/9593)) ([874ebac](https://github.com/Kugelaudio/KugelAudio/commit/874ebaca82a70a06a028a676afd252807c4a66b0))
+* **js-sdk:** send API keys in WebSocket headers on Node.js ([#9365](https://github.com/Kugelaudio/KugelAudio/issues/9365)) ([1e9185b](https://github.com/Kugelaudio/KugelAudio/commit/1e9185bf07c28d4d5ef8eaf38f55aa7448680d28))
+
+### Bug Fixes
+
+* **js-sdk:** `MultiContextSession` reads the server's `turn_ended` flag on per-context errors: a turn the server marks `turn_ended: true` is dropped and not replayed after a server restart, and a turn marked `false` stays open until its `final`; also fixes its audio encoding, unpooled `temperature` and settings error types ([#9246](https://github.com/Kugelaudio/KugelAudio/issues/9246)) ([b1590a1](https://github.com/Kugelaudio/KugelAudio/commit/b1590a1dc9e861e4a01a78fbf0e48beb4afc060c))
+* **js-sdk:** send token and `org_id` credentials on ASR, enhance and session WebSockets ([#9253](https://github.com/Kugelaudio/KugelAudio/issues/9253)) ([1dcd52a](https://github.com/Kugelaudio/KugelAudio/commit/1dcd52a483dccca2c9f0941f3e507bf2903a22e0))
+
 ## [kugelaudio-v1.8.0](https://github.com/Kugelaudio/KugelAudio/compare/js-sdk-v1.7.0...js-sdk-v1.8.0) (2026-11-14)
 
 ## [kugelaudio-v1.7.0](https://github.com/Kugelaudio/KugelAudio/compare/js-sdk-v1.6.0...js-sdk-v1.7.0) (2026-11-13)
