@@ -1,0 +1,18 @@
+# pnpm settings for packages/public/js-sdk; pnpm-lock.yaml is the lockfile, installed with
+# `pnpm install --frozen-lockfile` everywhere. Why pnpm and what each setting
+# does is explained once in products/web/pnpm-workspace.yaml: one store cloned
+# copy-on-write into every checkout instead of a real copy per worktree.
+nodeLinker: hoisted
+packageImportMethod: clone-or-copy
+
+# The packages npm ran install scripts for; pnpm runs none it is not told to.
+allowBuilds:
+  '@livekit/local-inference': true
+  esbuild: true
+  fsevents: true
+
+# Moved from package.json's npm `overrides`, which pnpm does not read.
+overrides:
+  glob: '^14.0.2'
+  minimatch: '^11.0.1'
+  sharp: 0.35.5

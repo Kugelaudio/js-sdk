@@ -1,6 +1,6 @@
 {
   "name": "kugelaudio",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Official TypeScript/JavaScript SDK for KugelAudio TTS API",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -103,10 +103,5 @@
   "dependencies": {
     "tsx": "^4.21.0",
     "ws": "^8.21.0"
-  },
-  "overrides": {
-    "glob": "^14.0.2",
-    "minimatch": "^11.0.1",
-    "sharp": "0.35.5"
   }
 }

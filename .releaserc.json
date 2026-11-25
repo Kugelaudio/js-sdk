@@ -45,7 +45,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "npm ci && npm run build"
+        "prepareCmd": "pnpm install --frozen-lockfile && pnpm run build"
       }
     ],
     [

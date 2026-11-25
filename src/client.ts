@@ -606,6 +606,8 @@ class TTSResource {
   private connecting: Promise<WebSocket> | null = null;
   private wsUrl: string | null = null;
   private pendingRequests: Map<number, {
+    /** The socket the request was sent on: only its frames and close reach it. */
+    ws: WebSocket;
     options: GenerateOptions;
     callbacks: StreamCallbacks;
     resolve: () => void;
@@ -889,16 +891,29 @@ class TTSResource {
             : String(event.data);
         const data = JSON.parse(messageData);
 
-        // Get the current pending request (we process one at a time)
-        const [requestId, pending] = [...this.pendingRequests.entries()][0] || [];
-        if (!pending) return;
+        // Frames carry no request id: the server answers pipelined requests
+        // in order, so a frame belongs to the oldest unfinished request sent
+        // on THIS socket (a swapped-out socket's requests never see a newer
+        // socket's frames). A terminal frame (error/final) removes that
+        // request BEFORE any caller callback runs: a throwing callback must
+        // never leave it at the head, or the next caller's audio is
+        // delivered to it (ENG-3312).
+        const head = [...this.pendingRequests.entries()].find(([, p]) => p.ws === ws);
+        if (!head) return;
+        const [requestId, pending] = head;
 
         if (data.error) {
+          this.pendingRequests.delete(requestId);
           const error = this.parseError(data);
           pending.op?.markServerError(error);
-          pending.callbacks.onError?.(error);
-          this.pendingRequests.delete(requestId);
           pending.reject(error);
+          try {
+            pending.callbacks.onError?.(error);
+          } catch (callbackError) {
+            // KEEP-JUSTIFIED: the caller's promise is already rejected with
+            // the server error; its own onError failing has nowhere else to go.
+            console.error('KugelAudio onError callback threw:', callbackError);
+          }
           return;
         }
 
@@ -913,9 +928,15 @@ class TTSResource {
             error: data.error,
             usage: parseSessionUsage(data) ?? undefined,
           };
-          pending.op?.markStage('finalizing');
-          pending.callbacks.onFinal?.(stats);
           this.pendingRequests.delete(requestId);
+          pending.op?.markStage('finalizing');
+          try {
+            pending.callbacks.onFinal?.(stats);
+          } catch (callbackError) {
+            // The caller's own onFinal failed: surface it on its promise.
+            pending.reject(callbackError as Error);
+            return;
+          }
           pending.resolve();
           return;
         }
@@ -943,13 +964,17 @@ class TTSResource {
     };
 
     ws.onclose = (event) => {
-      // Clear connection pool and keepalive
-      this.stopKeepalive();
-      this.wsConnection = null;
-      this.wsUrl = null;
+      // Clear the pool only if it still holds this socket: a socket swapped
+      // out (URL change) must not drop its successor.
+      if (this.wsConnection === ws) {
+        this.stopKeepalive();
+        this.wsConnection = null;
+        this.wsUrl = null;
+      }
 
-      // Reject all pending requests with appropriate error types
+      // Reject this socket's pending requests with appropriate error types
       for (const [id, pending] of [...this.pendingRequests]) {
+        if (pending.ws !== ws) continue;
         this.pendingRequests.delete(id);
         pending.op?.markWsCloseCode(event.code);
         // A server-initiated error close code keeps its specific error; any
@@ -962,21 +987,33 @@ class TTSResource {
           // fresh socket, chained to the original promise. The caller sees
           // neither the close nor the error of the replaced attempt.
           pending.op?.markRetry();
-          pending.callbacks.onServerRestart?.(error);
+          try {
+            pending.callbacks.onServerRestart?.(error);
+          } catch (callbackError) {
+            // KEEP-JUSTIFIED: the replay below still runs; one caller's
+            // throwing callback must not leave the others unsettled.
+            console.error('KugelAudio onServerRestart callback threw:', callbackError);
+          }
           setTimeout(() => {
             this.streamWithPooling(pending.options, pending.callbacks, true, pending.op)
               .then(pending.resolve, pending.reject);
           }, retryDelayMs(error));
           continue;
         }
-        pending.callbacks.onClose?.();
         // Anything still in `pendingRequests` never saw its `final` frame:
         // the entry is deleted the moment the stream completes. An
         // unrecognised close code (1006, 1011, or a bare 1000 arriving
         // early) therefore still has to reject, or the caller waits forever.
         const closeError = error ?? incompleteStreamError(event.code, event.reason);
-        pending.callbacks.onError?.(closeError);
         pending.reject(closeError);
+        try {
+          pending.callbacks.onClose?.();
+          pending.callbacks.onError?.(closeError);
+        } catch (callbackError) {
+          // KEEP-JUSTIFIED: the caller's promise is already rejected; one
+          // caller's throwing callback must not leave the others unsettled.
+          console.error('KugelAudio close callback threw:', callbackError);
+        }
       }
     };
 
@@ -985,10 +1022,17 @@ class TTSResource {
       const error = new ConnectionError(
         'KugelAudio WebSocket connection error. Check network connectivity.',
       );
-      for (const [id, pending] of this.pendingRequests) {
-        pending.callbacks.onError?.(error);
-        pending.reject(error);
+      for (const [id, pending] of [...this.pendingRequests]) {
+        if (pending.ws !== ws) continue;
         this.pendingRequests.delete(id);
+        pending.reject(error);
+        try {
+          pending.callbacks.onError?.(error);
+        } catch (callbackError) {
+          // KEEP-JUSTIFIED: the caller's promise is already rejected; one
+          // caller's throwing onError must not leave the others unsettled.
+          console.error('KugelAudio onError callback threw:', callbackError);
+        }
       }
     };
   }
@@ -1032,7 +1076,7 @@ class TTSResource {
 
     return new Promise((resolve, reject) => {
       this.pendingRequests.set(requestId, {
-        options, callbacks, resolve, reject, audioSeen: false, retried: retry, op,
+        ws, options, callbacks, resolve, reject, audioSeen: false, retried: retry, op,
       });
 
       if (!retry) callbacks.onOpen?.();
