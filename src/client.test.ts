@@ -2368,3 +2368,76 @@ describe('stream() closes with no final frame', () => {
     await expect(pending).rejects.toThrow(/before ready \(code 1011\)/);
   }, 2000);
 });
+
+describe('pooled stream(): concurrent calls', () => {
+  let client: KugelAudio;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    client = new KugelAudio({ apiKey: 'test-key-xxx' });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function sentTexts(ws: MockWs): string[] {
+    return ws.send.mock.calls
+      .map((c) => JSON.parse(c[0] as string).text)
+      .filter((t): t is string => typeof t === 'string');
+  }
+
+  it('gives a second concurrent call its own socket, so audio cannot cross', async () => {
+    const first: number[] = [];
+    const second: number[] = [];
+    const a = client.tts.stream({ text: 'first', voiceId: 1 }, { onChunk: (c) => first.push(c.index) });
+    const pooled = mockWs;
+    const b = client.tts.stream({ text: 'second', voiceId: 1 }, { onChunk: (c) => second.push(c.index) });
+    const own = mockWs;
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Frames carry no request id: two requests on one socket cannot be told apart.
+    expect(own).not.toBe(pooled);
+    expect(sentTexts(pooled)).toEqual(['first']);
+    expect(sentTexts(own)).toEqual(['second']);
+
+    own.onmessage?.({ data: makeAudioMsg(1) });
+    pooled.onmessage?.({ data: makeAudioMsg(0) });
+    own.onmessage?.({ data: makeFinalMsg(1, 100) });
+    pooled.onmessage?.({ data: makeFinalMsg(1, 100) });
+    await expect(a).resolves.toBeUndefined();
+    await expect(b).resolves.toBeUndefined();
+
+    expect(first).toEqual([0]);
+    expect(second).toEqual([1]);
+  });
+
+  it('reuses the pooled socket once the first request is done', async () => {
+    const a = client.tts.stream({ text: 'first', voiceId: 1 }, {});
+    const pooled = mockWs;
+    await vi.advanceTimersByTimeAsync(1);
+    pooled.onmessage?.({ data: makeFinalMsg(0, 0) });
+    await a;
+
+    const b = client.tts.stream({ text: 'second', voiceId: 1 }, {});
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mockWs).toBe(pooled);
+    expect(sentTexts(pooled)).toEqual(['first', 'second']);
+    pooled.onmessage?.({ data: makeFinalMsg(0, 0) });
+    await expect(b).resolves.toBeUndefined();
+  });
+
+  it('a failed request frees the pooled socket', async () => {
+    const a = client.tts.stream({ text: 'first', voiceId: 1 }, {});
+    const pooled = mockWs;
+    await vi.advanceTimersByTimeAsync(1);
+    pooled.onmessage?.({ data: JSON.stringify({ error: 'bad voice' }) });
+    await expect(a).rejects.toBeInstanceOf(KugelAudioError);
+
+    const b = client.tts.stream({ text: 'second', voiceId: 1 }, {});
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mockWs).toBe(pooled);
+    pooled.onmessage?.({ data: makeFinalMsg(0, 0) });
+    await expect(b).resolves.toBeUndefined();
+  });
+});

@@ -619,6 +619,8 @@ class TTSResource {
   }> = new Map();
   private requestCounter = 0;
   private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+  /** A request owns the pooled socket, from its send until it settles. */
+  private pooledBusy = false;
 
   constructor(private client: KugelAudio) {}
 
@@ -1023,6 +1025,26 @@ class TTSResource {
     options: GenerateOptions,
     callbacks: StreamCallbacks,
     retry = false,
+    op?: Operation,
+  ): Promise<void> {
+    // A rolling-deploy replay runs inside the original request's claim.
+    if (retry) return this.sendPooled(options, callbacks, retry, op);
+    // Server frames carry no request id, so the pooled socket serves one
+    // request at a time. A concurrent call gets a socket of its own instead
+    // of interleaving with, or queueing behind, the one in flight.
+    if (this.pooledBusy) return this.streamWithoutPooling(options, callbacks, false, op);
+    this.pooledBusy = true;
+    try {
+      return await this.sendPooled(options, callbacks, retry, op);
+    } finally {
+      this.pooledBusy = false;
+    }
+  }
+
+  private async sendPooled(
+    options: GenerateOptions,
+    callbacks: StreamCallbacks,
+    retry: boolean,
     op?: Operation,
   ): Promise<void> {
     if (!retry) warnIfNoLanguage(options.language, options.normalize);
