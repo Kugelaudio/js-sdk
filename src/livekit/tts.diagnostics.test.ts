@@ -68,7 +68,7 @@ async function drain(stream: SynthesizeStream, onFirst?: () => void): Promise<vo
 }
 
 describe('LiveKit telemetry option (contract "Enablement" step 2)', () => {
-  const HOSTED = 'https://api.kugelaudio.com';
+  const HOSTED = 'https://api.elbic.com';
 
   it('option false disables diagnostics on a hosted URL', () => {
     vi.stubEnv('KUGELAUDIO_TELEMETRY', '');

@@ -836,9 +836,9 @@ export interface StreamCallbacks {
 
 /**
  * Deployment region. Set `'eu'` to use the direct EU endpoint:
- * `api.eu.kugelaudio.com`.
+ * `api.eu.elbic.com`.
  *
- * If omitted, the SDK uses `api.kugelaudio.com`.
+ * If omitted, the SDK uses `api.elbic.com`.
  */
 export type Region = 'eu' | 'us' | 'global';
 
@@ -856,7 +856,7 @@ export interface KugelAudioOptions {
   orgId?: number;
   /** Deployment region. Set `eu` to select the direct EU endpoint. Takes precedence over API-key prefix but not over `apiUrl`. */
   region?: Region;
-  /** API base URL (default: https://api.kugelaudio.com) */
+  /** API base URL (default: https://api.elbic.com) */
   apiUrl?: string;
   /** TTS server URL (default: same as apiUrl) */
   ttsUrl?: string;

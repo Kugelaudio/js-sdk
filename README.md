@@ -4,7 +4,7 @@ Official TypeScript/JavaScript SDK for the [KugelAudio](https://kugelaudio.com)
 Text-to-Speech API — one-shot generation, WebSocket streaming, LLM sessions,
 voice cloning, dictionaries, and word timestamps.
 
-📖 **[Full documentation →](https://docs.kugelaudio.com/sdks/javascript/quickstart)**
+📖 **[Full documentation →](https://docs.elbic.com/sdks/javascript/quickstart)**
 
 
 Node.js uses authentication headers for REST requests and WebSocket upgrades.
@@ -38,7 +38,7 @@ const audio = await client.tts.generate({
 console.log(`${audio.durationMs}ms in ${audio.generationMs}ms (RTF ${audio.rtf})`);
 ```
 
-[`kugel-3.5`](https://docs.kugelaudio.com/models) is the current model; legacy IDs
+[`kugel-3.5`](https://docs.elbic.com/models) is the current model; legacy IDs
 (`kugel-1-turbo`, `kugel-2.5`, …) are still accepted.
 
 ## Streaming
@@ -72,11 +72,11 @@ await session.close();        // final flush + close
 > ⚠️ Do **not** call `session.send(text, true)` between sentences. Every explicit
 > flush is a separate request that pays time-to-first-audio again and leaves an
 > audible gap — see
-> [Chunking & latency](https://docs.kugelaudio.com/streaming/chunking-and-latency).
+> [Chunking & latency](https://docs.elbic.com/streaming/chunking-and-latency).
 
-More: [barge-in](https://docs.kugelaudio.com/streaming/barge-in) ·
-[multi-context](https://docs.kugelaudio.com/streaming/multi-context) ·
-[word timestamps](https://docs.kugelaudio.com/streaming/word-timestamps)
+More: [barge-in](https://docs.elbic.com/streaming/barge-in) ·
+[multi-context](https://docs.elbic.com/streaming/multi-context) ·
+[word timestamps](https://docs.elbic.com/streaming/word-timestamps)
 
 ## Speech Enhancement
 
@@ -153,7 +153,7 @@ tts.prewarm();   // open the WebSocket ahead of the first response
 ```
 
 `@livekit/agents` and `@livekit/rtc-node` are optional peer dependencies. See the
-[LiveKit guide](https://docs.kugelaudio.com/integrations/livekit) and
+[LiveKit guide](https://docs.elbic.com/integrations/livekit) and
 `examples/livekit_agent.ts`.
 
 The plugin reports synthesis failures through its `error` event, retaining the
@@ -196,9 +196,9 @@ options end the stream with an `error` event.
 
 ## Regions
 
-`api.kugelaudio.com` is geo-routed by default. To pin traffic to the EU, prefix
+`api.elbic.com` is geo-routed by default. To pin traffic to the EU, prefix
 the key (`eu-ka_…`) or pass `region: 'eu'` —
-[details](https://docs.kugelaudio.com/guides/regions).
+[details](https://docs.elbic.com/guides/regions).
 
 ## Agent skills
 
@@ -213,7 +213,7 @@ npx kugelaudio-skills install     # → ./.claude/skills/kugelaudio-tts/
 `--global` installs to `~/.claude/skills/`, `--dest <dir>` picks another target.
 `npx -p kugelaudio kugelaudio-skills install --global` makes the skill available
 in every folder.
-[Agent skills](https://docs.kugelaudio.com/guides/agent-skill) has the details.
+[Agent skills](https://docs.elbic.com/guides/agent-skill) has the details.
 
 ## Audio helpers
 
@@ -237,19 +237,19 @@ started, or when the turn was replayed once already.
 import { AuthenticationError, RateLimitError } from 'kugelaudio';
 ```
 
-See the [error reference](https://docs.kugelaudio.com/api-reference/errors).
+See the [error reference](https://docs.elbic.com/api-reference/errors).
 
 ## Documentation
 
 | Topic | Link |
 |---|---|
-| Client options, auth, regions | [Configuration](https://docs.kugelaudio.com/sdks/javascript/configuration) |
-| Generation parameters | [Generate](https://docs.kugelaudio.com/sdks/javascript/generate) |
-| Streaming & LLM sessions | [Streaming](https://docs.kugelaudio.com/sdks/javascript/streaming) |
-| Normalization & languages | [Text normalization](https://docs.kugelaudio.com/sdks/javascript/normalization) |
-| List, create, clone voices | [Voices](https://docs.kugelaudio.com/sdks/javascript/voices) |
-| Pronunciation dictionaries | [Dictionaries](https://docs.kugelaudio.com/sdks/javascript/dictionaries) |
-| Types & audio utilities | [Types](https://docs.kugelaudio.com/sdks/javascript/types) |
+| Client options, auth, regions | [Configuration](https://docs.elbic.com/sdks/javascript/configuration) |
+| Generation parameters | [Generate](https://docs.elbic.com/sdks/javascript/generate) |
+| Streaming & LLM sessions | [Streaming](https://docs.elbic.com/sdks/javascript/streaming) |
+| Normalization & languages | [Text normalization](https://docs.elbic.com/sdks/javascript/normalization) |
+| List, create, clone voices | [Voices](https://docs.elbic.com/sdks/javascript/voices) |
+| Pronunciation dictionaries | [Dictionaries](https://docs.elbic.com/sdks/javascript/dictionaries) |
+| Types & audio utilities | [Types](https://docs.elbic.com/sdks/javascript/types) |
 
 ## License
 

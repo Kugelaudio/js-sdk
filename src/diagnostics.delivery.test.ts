@@ -35,7 +35,7 @@ function attrs(payload: string, index = 0): Record<string, string> {
 
 function diagnostics(send: DiagnosticsSender, authHeaders: Record<string, string> = {}): Diagnostics {
   return new Diagnostics({
-    apiUrl: 'https://api.kugelaudio.com',
+    apiUrl: 'https://api.elbic.com',
     sdkVersion: '9.9.9',
     authHeaders,
     sender: send,

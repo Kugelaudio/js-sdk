@@ -20,8 +20,8 @@ const opts: WireOptions = {
 
 describe('buildMultiWsUrl', () => {
   it('rewrites https to wss and targets /ws/tts/multi with SDK metadata', () => {
-    const url = buildMultiWsUrl('https://api.kugelaudio.com');
-    expect(url).toContain('wss://api.kugelaudio.com/ws/tts/multi');
+    const url = buildMultiWsUrl('https://api.elbic.com');
+    expect(url).toContain('wss://api.elbic.com/ws/tts/multi');
     expect(new URL(url).searchParams.has('api_key')).toBe(false);
   });
 

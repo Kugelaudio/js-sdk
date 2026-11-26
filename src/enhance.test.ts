@@ -283,7 +283,7 @@ describe('client.enhance.generate', () => {
     expect(result.sampleRate).toBe(24000);
     expect(result.duration).toBe(0.2);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://api.kugelaudio.com/v1/audio/enhance');
+    expect(url).toBe('https://api.elbic.com/v1/audio/enhance');
     expect(init.method).toBe('POST');
     expect(init.headers['X-API-Key']).toBe('test-key');
     const body = init.body as FormData;

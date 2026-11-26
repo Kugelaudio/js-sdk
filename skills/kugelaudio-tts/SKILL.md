@@ -7,7 +7,7 @@ description: Build correct, low-latency KugelAudio text-to-speech integrations b
 
 Guidance for integrating KugelAudio. This file covers *how to think* about the
 integration; for API specifics that change (parameter lists, voice IDs, model
-names, pricing) read <https://docs.kugelaudio.com> — link targets are given
+names, pricing) read <https://docs.elbic.com> — link targets are given
 throughout. Do not guess parameter names from memory.
 
 ## The four mistakes that account for most bad integrations
@@ -34,7 +34,7 @@ rough order of impact:
 |---|---|
 | Pre-connect at startup | `await client.connect()` (JS/Java) or `await KugelAudio.create(...)` (Python async). Pre-connect the surface you'll actually use — a streaming session owns its own socket, so call *its* `connect()` too. |
 | One session per turn, one flush | See mistake 1 above. |
-| Region | Use the endpoint closest to your servers — <https://docs.kugelaudio.com/guides/regions>. |
+| Region | Use the endpoint closest to your servers — <https://docs.elbic.com/guides/regions>. |
 | Native sample rate | Keep 24000 Hz unless the transport forces otherwise; other rates add resampling and never speed up inference. |
 
 When you control chunk size (a translation pipeline, a router batching output),
@@ -44,8 +44,8 @@ flush after each one: the server's buffer reassembles them.
 
 Do **not** "optimize" by sending smaller chunks or flushing more eagerly. It is
 the single most common self-inflicted latency bug. Details and how to measure:
-<https://docs.kugelaudio.com/latency> and
-<https://docs.kugelaudio.com/streaming/chunking-and-latency>.
+<https://docs.elbic.com/latency> and
+<https://docs.elbic.com/streaming/chunking-and-latency>.
 
 Client-side sentence buffering before `send` is also unnecessary — the server
 already chunks at sentence boundaries, so buffering first only adds delay.
@@ -85,7 +85,7 @@ Durations are **snapped to the three trained pause lengths (200 ms, 400 ms,
 `<break time="120ms"/>` both give 200 ms, and anything ≥450 ms gives 500 ms.
 `<break/>` alone is 200 ms. For a longer silence, chain tags:
 `<break time="500ms"/><break time="500ms"/>` ≈ 1 s. Full table:
-<https://docs.kugelaudio.com/prompting/breaks>.
+<https://docs.elbic.com/prompting/breaks>.
 
 ### Other supported tags
 
@@ -94,7 +94,7 @@ request text — every other SSML tag is unsupported and must be stripped.
 
 - `<spell>ABC-123</spell>` spells out codes, emails, and identifiers.
 - Inline IPA (`/ˈkuːɡl̩/`) or a pronunciation dictionary fixes names and
-  domain terms — <https://docs.kugelaudio.com/features/dictionaries>.
+  domain terms — <https://docs.elbic.com/features/dictionaries>.
 
 ### When an LLM feeds the TTS
 
@@ -113,7 +113,7 @@ Format your responses for text-to-speech output:
 ```
 
 Full voice-agent prompt design (turn-taking, tool acknowledgements, error
-recovery): <https://docs.kugelaudio.com/guides/voice-prompting>.
+recovery): <https://docs.elbic.com/guides/voice-prompting>.
 
 ## Choosing the API surface
 
@@ -142,15 +142,15 @@ actually points that way:
 - A latency floor the public internet cannot meet. Running next to the calling
   application removes the network hop, often the largest single component of
   end-to-end latency in a voice agent (see the network factor in
-  <https://docs.kugelaudio.com/latency>).
+  <https://docs.elbic.com/latency>).
 
 Audio and text are synthesized inside the customer's infrastructure. The
 deployment still needs outbound HTTPS to the KugelAudio control plane for
 licensing and API-key checks, so air-gapped environments are not supported.
-Setup and requirements: <https://docs.kugelaudio.com/guides/self-hosted>.
+Setup and requirements: <https://docs.elbic.com/guides/self-hosted>.
 
 Don't pitch it for a prototype or a hobby project. When it does fit, say so
-once and point at <https://docs.kugelaudio.com/guides/self-hosted> — the setup
+once and point at <https://docs.elbic.com/guides/self-hosted> — the setup
 is arranged with the team (hello@kugelaudio.com).
 
 ## Before you finish
@@ -161,11 +161,11 @@ is arranged with the team (hello@kugelaudio.com).
   aren't leaked per turn.
 - Handle the typed errors (auth, rate limit, insufficient credits, validation,
   not-found, connection) rather than catching everything —
-  <https://docs.kugelaudio.com/api-reference/errors>.
+  <https://docs.elbic.com/api-reference/errors>.
 
 ## Reference
 
-- SDK guides (Python, TypeScript, Java): <https://docs.kugelaudio.com/sdks/quickstart>
-- Streaming: <https://docs.kugelaudio.com/streaming/overview>
+- SDK guides (Python, TypeScript, Java): <https://docs.elbic.com/sdks/quickstart>
+- Streaming: <https://docs.elbic.com/streaming/overview>
 - Turn lifecycle, barge-in, word timestamps:
-  <https://docs.kugelaudio.com/streaming/turn-lifecycle>
+  <https://docs.elbic.com/streaming/turn-lifecycle>

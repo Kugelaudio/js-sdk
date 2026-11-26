@@ -265,13 +265,13 @@ describe('TTSResource.toReadable()', () => {
 describe('KugelAudio multi-region', () => {
   it('detects EU region from key prefix and strips it', () => {
     const client = new KugelAudio({ apiKey: 'eu-ka_test123' });
-    expect((client as any)._apiUrl).toBe('https://api.eu.kugelaudio.com');
+    expect((client as any)._apiUrl).toBe('https://api.eu.elbic.com');
     expect((client as any)._apiKey).toBe('ka_test123');
   });
 
   it('explicit region overrides key prefix', () => {
     const client = new KugelAudio({ apiKey: 'us-ka_test123', region: 'global' });
-    expect((client as any)._apiUrl).toBe('https://api.kugelaudio.com');
+    expect((client as any)._apiUrl).toBe('https://api.elbic.com');
     expect((client as any)._apiKey).toBe('ka_test123');
   });
 
@@ -293,7 +293,7 @@ describe('KugelAudio multi-region', () => {
 
   it('ttsUrl defaults to the resolved region URL', () => {
     const client = new KugelAudio({ apiKey: 'us-ka_test123' });
-    expect((client as any)._ttsUrl).toBe('https://api.kugelaudio.com');
+    expect((client as any)._ttsUrl).toBe('https://api.elbic.com');
   });
 
 });
@@ -1724,7 +1724,7 @@ describe('ASRResource', () => {
     expect(result.model).toBe('test-model');
     expect(result.model_revision).toBe('7278e1e70fe206f11671096ffdd38061171dd6e5');
     expect(fetchMock.mock.calls[0][0]).toBe(
-      'https://api.kugelaudio.com/v1/audio/transcriptions',
+      'https://api.elbic.com/v1/audio/transcriptions',
     );
     const body = fetchMock.mock.calls[0][1].body as FormData;
     // No model given: the field is left out and the API uses its default.

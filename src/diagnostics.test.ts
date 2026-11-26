@@ -93,7 +93,7 @@ function activeDiagnostics(
   env: DiagnosticsEnv = {},
 ): Diagnostics {
   return new Diagnostics({
-    apiUrl: 'https://api.kugelaudio.com',
+    apiUrl: 'https://api.elbic.com',
     sdkVersion: '9.9.9',
     authHeaders: AUTH_HEADERS,
     sender: send,
@@ -132,12 +132,14 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('enablement (contract B3)', () => {
-  const HOSTED = 'https://api.kugelaudio.com';
+  const HOSTED = 'https://api.elbic.com';
   const CUSTOM = 'https://tts.internal.acme.corp';
 
   it('classifies the endpoint by host suffix', () => {
     expect(endpointKindFor(HOSTED)).toBe('hosted');
+    expect(endpointKindFor('https://api.eu.elbic.com')).toBe('hosted');
     expect(endpointKindFor('https://api.eu.kugelaudio.com')).toBe('hosted');
+    expect(endpointKindFor('https://elbic.com.evil.example')).toBe('custom');
     expect(endpointKindFor(CUSTOM)).toBe('custom');
     expect(endpointKindFor('not a url')).toBe('custom');
   });
@@ -199,7 +201,7 @@ describe('delivery through the SDK API (contract C1)', () => {
     await diag.flush();
 
     expect(sent).toHaveLength(1);
-    expect(sent[0].url).toBe(`https://api.kugelaudio.com${TELEMETRY_PATH}`);
+    expect(sent[0].url).toBe(`https://api.elbic.com${TELEMETRY_PATH}`);
     expect(sent[0].headers['Content-Type']).toBe('application/json');
     // No public ingestion credential exists any more.
     expect(sent[0].headers['x-oneuptime-token']).toBeUndefined();
@@ -236,7 +238,7 @@ describe('delivery through the SDK API (contract C1)', () => {
     client.diagnostics.setSender(send);
 
     expect(client.diagnostics.endpoint).toBe(
-      `https://api.kugelaudio.com${TELEMETRY_PATH}`,
+      `https://api.elbic.com${TELEMETRY_PATH}`,
     );
 
     client.diagnostics.report('request_failed');
@@ -397,7 +399,7 @@ describe('attribute allowlist (contract B2)', () => {
     const encoded = encodeAttributes({
       'kugel.event': 'request_failed',
       'kugel.text': 'the secret sentence we synthesized',
-      'http.url': 'https://api.kugelaudio.com/v1/models',
+      'http.url': 'https://api.elbic.com/v1/models',
       'user.id': '42',
       'kugel.http_status': 500,
     });

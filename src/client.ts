@@ -58,8 +58,8 @@ import {
 import type { Region } from './types';
 import packageJson from '../package.json';
 
-const DEFAULT_API_URL = 'https://api.kugelaudio.com';
-const EU_API_URL = 'https://api.eu.kugelaudio.com';
+const DEFAULT_API_URL = 'https://api.elbic.com';
+const EU_API_URL = 'https://api.eu.elbic.com';
 const SUPPORTED_REGIONS = ['eu', 'us', 'global'] as const;
 const SDK_NAME = 'js';
 const SDK_VERSION = packageJson.version;
@@ -2970,7 +2970,7 @@ export class KugelAudio {
     if (!options.apiKey) {
       throw new ValidationError(
         'KugelAudio API key is missing. Pass { apiKey: ... } to the client. ' +
-          'Get a key at https://www.kugelaudio.com/dashboard.',
+          'Get a key at https://www.elbic.com/dashboard.',
       );
     }
 

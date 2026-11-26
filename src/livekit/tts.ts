@@ -126,8 +126,8 @@ export interface TTSOptions {
   telemetry?: boolean;
 }
 
-const DEFAULT_BASE_URL = 'https://api.kugelaudio.com';
-const EU_BASE_URL = 'https://api.eu.kugelaudio.com';
+const DEFAULT_BASE_URL = 'https://api.elbic.com';
+const EU_BASE_URL = 'https://api.eu.elbic.com';
 
 /** Strip an `eu-`/`us-`/`global-` region prefix from an API key. */
 function parseApiKey(apiKey: string): { cleanKey: string; region?: string } {

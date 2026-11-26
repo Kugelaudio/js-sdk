@@ -52,7 +52,8 @@ export type {
 /** Path appended to the effective API base URL. There is no override. */
 export const TELEMETRY_PATH = '/v1/sdk-diagnostics';
 
-const HOSTED_HOST_SUFFIX = '.kugelaudio.com';
+/** Hosted API domains: elbic, and kugelaudio for clients pinned to the old hosts. */
+const HOSTED_HOST_SUFFIXES = ['.elbic.com', '.kugelaudio.com'] as const;
 
 /** Bounded queue capacity; when full the OLDEST event is dropped. */
 const QUEUE_CAPACITY = 64;
@@ -168,11 +169,11 @@ function processEnv(): DiagnosticsEnv {
   }
 }
 
-/** `hosted` when the effective API URL host ends in `.kugelaudio.com`. */
+/** `hosted` when the effective API URL host ends in `.elbic.com` or `.kugelaudio.com`. */
 export function endpointKindFor(apiUrl: string): DiagnosticsEndpointKind {
   try {
     const host = new URL(apiUrl).hostname.toLowerCase();
-    return host.endsWith(HOSTED_HOST_SUFFIX) ? 'hosted' : 'custom';
+    return HOSTED_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix)) ? 'hosted' : 'custom';
   } catch {
     return 'custom';
   }

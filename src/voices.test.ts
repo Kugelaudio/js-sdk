@@ -29,7 +29,7 @@ describe('VoicesResource deletes (204 No Content)', () => {
     const client = new KugelAudio({ apiKey: 'test-key-xxx' });
 
     await expect(client.voices.delete(1071)).resolves.toBeUndefined();
-    expect(fetchMock.mock.calls[0][0]).toBe('https://api.kugelaudio.com/v1/voices/1071');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.elbic.com/v1/voices/1071');
     expect(fetchMock.mock.calls[0][1].method).toBe('DELETE');
   });
 
@@ -39,7 +39,7 @@ describe('VoicesResource deletes (204 No Content)', () => {
 
     await expect(client.voices.deleteReference(1071, 456)).resolves.toBeUndefined();
     expect(fetchMock.mock.calls[0][0]).toBe(
-      'https://api.kugelaudio.com/v1/voices/1071/references/456',
+      'https://api.elbic.com/v1/voices/1071/references/456',
     );
   });
 });
@@ -107,7 +107,7 @@ describe('speaker consent (voice create and reference upload)', () => {
 
     await client.voices.create({ name: 'Anna', sex: 'female', speakerConsent: true });
 
-    expect(fetchMock.mock.calls[0][0]).toBe('https://api.kugelaudio.com/v1/voices');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.elbic.com/v1/voices');
     expect(await metadataOf(fetchMock)).toMatchObject({ name: 'Anna', speaker_consent: true });
   });
 
@@ -132,7 +132,7 @@ describe('speaker consent (voice create and reference upload)', () => {
     });
 
     expect(fetchMock.mock.calls[0][0]).toBe(
-      'https://api.kugelaudio.com/v1/voices/1071/references',
+      'https://api.elbic.com/v1/voices/1071/references',
     );
     const form = fetchMock.mock.calls[0][1].body as FormData;
     expect(form.get('speaker_consent')).toBe('true');
